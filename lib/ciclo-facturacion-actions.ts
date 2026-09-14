@@ -705,6 +705,15 @@ function diaSiguienteISO(fechaISO: string): string {
   return `${y}-${m}-${dd}`
 }
 
+function diaAnteriorISO(fechaISO: string): string {
+  const d = new Date(fechaISO + "T00:00:00")
+  d.setDate(d.getDate() - 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${dd}`
+}
+
 export interface ResultadoGeneracionOwner {
   owner: string
   success: boolean
@@ -757,9 +766,27 @@ export interface ResultadoGeneracionManual {
  * (período contiguo, `fecha_inicio` como único arranque válido sin
  * inventar uno, solapes, "nada que facturar" -- las mismas protecciones
  * financieras del cron, ninguna se relaja).
+ *
+ * `rangoManual` (opcional): para proyectos NO diarios, el Jefe puede necesitar
+ * generar un tramo puntual que no coincide con el período contiguo automático
+ * (una excepción, un cierre anticipado) -- ver botón "Generar rango manual"
+ * en la UI (usuario 2026-09-14: "para los proyectos que no son diarios debes
+ * permitir realizarlo por rango de fecha"). Si se pasa, reemplaza el cálculo
+ * automático de `desde`/`hasta` para TODOS los owners del proyecto, pero el
+ * solape SIGUE revisándose igual (nunca se relaja esa protección) -- y si el
+ * `desde` manual no coincide con el que habría calculado el período contiguo,
+ * se guarda como advertencia (no bloquea) para que quede visible que puede
+ * haber quedado un hueco sin facturar entre el corte anterior y este.
  */
-export async function generarPrefacturaAhora(idempresa: number, usuario: string): Promise<ResultadoGeneracionManual> {
+export async function generarPrefacturaAhora(
+  idempresa: number,
+  usuario: string,
+  rangoManual?: { desde: string; hasta: string },
+): Promise<ResultadoGeneracionManual> {
   try {
+    if (rangoManual && rangoManual.desde > rangoManual.hasta) {
+      return { success: false, estado: "error", mensaje: "La fecha 'Desde' no puede ser posterior a 'Hasta'.", resultados: [] }
+    }
     const sb: any = await getSupabaseAdmin()
     const { data: cond } = await sb
       .from("condiciones_generacion_prefactura")
@@ -767,7 +794,7 @@ export async function generarPrefacturaAhora(idempresa: number, usuario: string)
       .eq("idempresa", idempresa)
       .maybeSingle()
     const fechaInicioProyecto: string | null = cond?.fecha_inicio || null
-    const hasta = fechaAyerColombiaISO()
+    const hasta = rangoManual?.hasta || fechaAyerColombiaISO()
 
     // Última prefactura POR OWNER (no por proyecto) -- cada owner sigue su
     // propio período contiguo. Un owner sin prefactura previa arranca en
@@ -788,11 +815,13 @@ export async function generarPrefacturaAhora(idempresa: number, usuario: string)
     }
 
     // Descubrir TODOS los owners con algo pendiente: ventana amplia desde el
-    // arranque más temprano posible (el owner más atrasado) hasta ayer. Si
-    // ni un solo owner tiene historial NI hay fecha_inicio, no hay desde
-    // dónde partir -- nunca se inventa un arranque.
-    const desdeMasAntiguo =
-      previas && previas.length > 0
+    // arranque más temprano posible (el owner más atrasado) hasta ayer -- o,
+    // con rango manual, exactamente la ventana que pidió el Jefe. Si ni un
+    // solo owner tiene historial NI hay fecha_inicio NI rango manual, no hay
+    // desde dónde partir -- nunca se inventa un arranque.
+    const desdeMasAntiguo = rangoManual
+      ? rangoManual.desde
+      : previas && previas.length > 0
         ? [...ultimaPorOwner.values()].map(diaSiguienteISO).sort()[0]
         : fechaInicioProyecto
     if (!desdeMasAntiguo) {
@@ -819,7 +848,8 @@ export async function generarPrefacturaAhora(idempresa: number, usuario: string)
 
     const resultados: ResultadoGeneracionOwner[] = []
     for (const owner of ownersConPendiente) {
-      const desdeOwner = ultimaPorOwner.has(owner) ? diaSiguienteISO(ultimaPorOwner.get(owner)!) : fechaInicioProyecto
+      const desdeAutomatico = ultimaPorOwner.has(owner) ? diaSiguienteISO(ultimaPorOwner.get(owner)!) : fechaInicioProyecto
+      const desdeOwner = rangoManual ? rangoManual.desde : desdeAutomatico
       if (!desdeOwner) {
         // Owner nuevo, sin historial Y sin fecha_inicio -- no debería pasar
         // (fecha_inicio ya se validó arriba), pero por si acaso no se inventa nada.
@@ -895,6 +925,15 @@ export async function generarPrefacturaAhora(idempresa: number, usuario: string)
         if (t.ordenes_medio_pago > 0) advertencias.push({ tipo: "pago_no_cuadra", detalle: `${t.ordenes_medio_pago} orden(es) con medio de pago inconsistente -- todo el proyecto` })
         if (ctrlR.data.produccionAviso) advertencias.push({ tipo: "produccion_aviso", detalle: ctrlR.data.produccionAviso })
         for (const al of ctrlR.data.produccionAlertas || []) advertencias.push({ tipo: "produccion_alerta", detalle: al })
+      }
+      if (rangoManual && desdeAutomatico && desdeOwner !== desdeAutomatico) {
+        advertencias.push({
+          tipo: "rango_manual",
+          detalle:
+            desdeOwner > desdeAutomatico
+              ? `Rango manual: este período arranca en ${desdeOwner}, pero el período contiguo esperado arrancaba en ${desdeAutomatico} -- revisa que ${desdeAutomatico} a ${diaAnteriorISO(desdeOwner)} no se quede sin facturar.`
+              : `Rango manual: este período arranca en ${desdeOwner}, antes del período contiguo esperado (${desdeAutomatico}) -- confirma que no se solape con lo ya facturado.`,
+        })
       }
       const r = await guardarPrefactura({
         idempresa,

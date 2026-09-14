@@ -982,6 +982,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
   const [guardando, setGuardando] = useState<number | null>(null)
   const [generando, setGenerando] = useState<number | null>(null)
   const [nuevoCorte, setNuevoCorte] = useState<Record<number, string>>({})
+  const [rangoManual, setRangoManual] = useState<Record<number, { desde: string; hasta: string }>>({})
 
   const cargar = async () => {
     const r = await getCondicionesGeneracionPrefactura()
@@ -1020,6 +1021,30 @@ function FrecuenciaGeneracionPrefacturaPanel() {
     })
   }
 
+  const generarRangoManual = async (c: CondicionGeneracionPrefactura) => {
+    const rango = rangoManual[c.idempresa]
+    if (!rango?.desde || !rango?.hasta) return
+    if (
+      !confirm(
+        `¿Generar la(s) prefactura(s) de ${c.proyecto} para el rango ${rango.desde} a ${rango.hasta}? Esto crea documentos reales -- uno por cada cliente (owner) con actividad en ese rango. Si ese "desde" no coincide con el período contiguo esperado, la prefactura se genera igual pero queda con una advertencia visible para que la revises.`,
+      )
+    )
+      return
+    setGenerando(c.idempresa)
+    const r = await generarPrefacturaAhora(c.idempresa, usuario, rango)
+    setGenerando(null)
+    if (r.resultados.length === 0) {
+      toast({ title: r.success ? "Nada que generar" : "No se generó", description: r.mensaje, variant: r.success ? "default" : "destructive" })
+      return
+    }
+    const detalle = r.resultados.map((ro) => `${ro.owner}: ${ro.estado === "generada" ? "generada" : ro.estado} -- ${ro.mensaje}`).join("\n")
+    toast({
+      title: r.estado === "generada" ? "Prefactura(s) generada(s)" : r.estado === "parcial" ? "Generado con avisos" : "Sin novedad",
+      description: detalle,
+      variant: r.success ? "default" : "destructive",
+    })
+  }
+
   return (
     <Card>
       <CardHeader className="cursor-pointer pb-2" onClick={() => setAbierto((v) => !v)}>
@@ -1033,7 +1058,9 @@ function FrecuenciaGeneracionPrefacturaPanel() {
           8am, y si encuentra advertencias (sin tarifa vigente, pago que no cuadra) igual la genera y te avisa aquí para que la revises después. Si el
           proyecto NUNCA ha tenido una prefactura, no hay de dónde partir -- escribe la "Fecha de inicio" una sola vez para que arranque; de ahí en
           adelante sigue solo. <strong>Usa "Generar ahora" para probarlo o para no esperar al cron de mañana</strong> -- hace exactamente lo mismo que
-          la corrida automática, pero al instante y con el resultado a la vista.
+          la corrida automática, pero al instante y con el resultado a la vista. En proyectos no diarios, el cuadro punteado <strong>"Rango manual
+          (excepción)"</strong> permite generar un tramo puntual con fechas exactas en vez del período contiguo automático -- para cierres
+          anticipados u otros casos fuera de lo normal.
         </CardDescription>
       </CardHeader>
       {abierto && (
@@ -1095,6 +1122,34 @@ function FrecuenciaGeneracionPrefacturaPanel() {
                 {generando === c.idempresa && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                 Generar ahora
               </Button>
+
+              {c.frecuencia !== "diario" && (
+                <div className="flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1">
+                  <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Rango manual (excepción)</Label>
+                  <DatePickerField
+                    value={rangoManual[c.idempresa]?.desde || ""}
+                    onChange={(v) => setRangoManual((prev) => ({ ...prev, [c.idempresa]: { desde: v || "", hasta: prev[c.idempresa]?.hasta || "" } }))}
+                    className="h-7 w-32 text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">a</span>
+                  <DatePickerField
+                    value={rangoManual[c.idempresa]?.hasta || ""}
+                    onChange={(v) => setRangoManual((prev) => ({ ...prev, [c.idempresa]: { desde: prev[c.idempresa]?.desde || "", hasta: v || "" } }))}
+                    className="h-7 w-32 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => generarRangoManual(c)}
+                    disabled={generando === c.idempresa || !rangoManual[c.idempresa]?.desde || !rangoManual[c.idempresa]?.hasta}
+                    title="Genera exactamente este rango de fechas, en vez del período contiguo automático -- para casos puntuales"
+                  >
+                    {generando === c.idempresa && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                    Generar rango
+                  </Button>
+                </div>
+              )}
 
               {c.frecuencia === "cortes" && (
                 <div className="w-full space-y-1.5 pl-1 pt-1">
