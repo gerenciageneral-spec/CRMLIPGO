@@ -52,7 +52,7 @@ import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-uploader"
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Settings2, Wallet } from "lucide-react"
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, Settings2, Wallet } from "lucide-react"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -191,7 +191,7 @@ export default function CicloFacturacion() {
   // MODIFIQUE el paso del otro rol, y eso ya lo bloquea `necesitaMiAccion`
   // más abajo (los botones de acción solo aparecen para quien tiene el
   // permiso de ESE paso), sin importar qué pestaña esté mirando.
-  type Vista = "todas" | "jefe" | "coordinador" | "cartera"
+  type Vista = "todas" | "jefe" | "coordinador" | "cartera" | "contado"
   const [vista, setVista] = useState<Vista>("todas")
   useEffect(() => {
     if (permisos.jefe && !permisos.coordinador) setVista("jefe")
@@ -350,6 +350,11 @@ export default function CicloFacturacion() {
               <TabsTrigger value="cartera" className="gap-1.5 text-xs">
                 <Wallet className="h-3.5 w-3.5" /> Cartera <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{contadores.cartera}</Badge>
               </TabsTrigger>
+              {permisos.jefe && (
+                <TabsTrigger value="contado" className="gap-1.5 text-xs">
+                  <Receipt className="h-3.5 w-3.5" /> Pagos de Contado
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
 
@@ -426,7 +431,9 @@ export default function CicloFacturacion() {
             )}
           </div>
 
-          {loading ? (
+          {vista === "contado" ? (
+            <PagosContadoPanel empresaId={filtros.empresaId} periodoDesde={filtros.periodoDesde} periodoHasta={filtros.periodoHasta} />
+          ) : loading ? (
             <div className="py-8 text-center text-xs text-muted-foreground">Cargando…</div>
           ) : data.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -1183,5 +1190,224 @@ function CondicionesPagoPanel() {
         </CardContent>
       )}
     </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Pagos de Contado -- pestaña de RECONCILIACIÓN BANCARIA (2026-09-14, pedido
+// del usuario). Las órdenes de pago de contado (mediopago="Contado") se
+// gestionan hoy en Gestión de Facturas -- el Coordinador sube ahí la FOTO del
+// comprobante (`cabeceraoc.comprobante`), pero antes de esto no existía
+// ninguna pantalla que agrupara esos comprobantes para cruzarlos contra el
+// extracto bancario: quedaban enterrados en cada orden, uno por uno. Esta
+// pestaña NO agrega ningún dato nuevo, solo hace consultable/filtrable lo que
+// ya se captura (misma fuente que Gestión de Facturas: `/api/gestion-facturas`,
+// filtrado por `medioPago=Contado`, reusa el Proyecto/Período de la barra de
+// arriba del módulo).
+// ---------------------------------------------------------------------------
+
+interface OrdenContado {
+  id: number
+  ordendecargue: string
+  fechacargue: string
+  placa: string
+  transporte: string
+  cliente: string | null
+  valorpago: number | null
+  cuentatransferencia: string | null
+  comprobante: string | null
+  estadofactura: string | null
+}
+
+function comprobanteUrls(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : [raw]
+  } catch {
+    return [raw]
+  }
+}
+
+function esComprobantePdf(url: string): boolean {
+  const limpio = url.split("?")[0].split("#")[0]
+  return limpio.toLowerCase().endsWith(".pdf")
+}
+
+function PagosContadoPanel({
+  empresaId,
+  periodoDesde,
+  periodoHasta,
+}: {
+  empresaId: number | null
+  periodoDesde: string
+  periodoHasta: string
+}) {
+  const { toast } = useToast()
+  const [ordenes, setOrdenes] = useState<OrdenContado[]>([])
+  const [loading, setLoading] = useState(true)
+  const [soloSinComprobante, setSoloSinComprobante] = useState(false)
+  const [cuentaFiltro, setCuentaFiltro] = useState("")
+  const [viendoComprobante, setViendoComprobante] = useState<OrdenContado | null>(null)
+  const [indiceImagen, setIndiceImagen] = useState(0)
+
+  useEffect(() => {
+    let cancelado = false
+    const cargar = async () => {
+      setLoading(true)
+      const params = new URLSearchParams({ medioPago: "Contado", pageSize: "500" })
+      if (empresaId) params.set("empresaId", String(empresaId))
+      if (periodoDesde) params.set("fechaCargueDesde", periodoDesde)
+      if (periodoHasta) params.set("fechaCargueHasta", periodoHasta)
+      try {
+        const res = await fetch(`/api/gestion-facturas?${params.toString()}`)
+        const json = await res.json()
+        if (cancelado) return
+        if (json.success) setOrdenes(json.data)
+        else toast({ title: "Error", description: json.error, variant: "destructive" })
+      } catch (e: any) {
+        if (!cancelado) toast({ title: "Error", description: e?.message || "No se pudo cargar", variant: "destructive" })
+      }
+      if (!cancelado) setLoading(false)
+    }
+    cargar()
+    return () => {
+      cancelado = true
+    }
+  }, [empresaId, periodoDesde, periodoHasta, toast])
+
+  const cuentas = useMemo(
+    () => Array.from(new Set(ordenes.map((o) => o.cuentatransferencia).filter(Boolean))) as string[],
+    [ordenes],
+  )
+
+  const filtradas = useMemo(
+    () =>
+      ordenes.filter((o) => {
+        if (soloSinComprobante && o.comprobante) return false
+        if (cuentaFiltro && o.cuentatransferencia !== cuentaFiltro) return false
+        return true
+      }),
+    [ordenes, soloSinComprobante, cuentaFiltro],
+  )
+
+  const total = filtradas.reduce((s, o) => s + Number(o.valorpago || 0), 0)
+  const sinComprobante = filtradas.filter((o) => !o.comprobante).length
+  const urls = viendoComprobante ? comprobanteUrls(viendoComprobante.comprobante) : []
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Órdenes marcadas como pago de <strong>Contado</strong> en Gestión de Facturas, con el comprobante que subió el
+        Coordinador -- para cruzar contra el extracto bancario. Usa el filtro de Proyecto/Período de arriba de esta pantalla.
+      </p>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-2.5">
+        <label className="flex items-center gap-1.5 text-xs">
+          <Switch checked={soloSinComprobante} onCheckedChange={setSoloSinComprobante} /> Solo sin comprobante
+        </label>
+        {cuentas.length > 0 && (
+          <Select value={cuentaFiltro || "todas"} onValueChange={(v) => setCuentaFiltro(v === "todas" ? "" : v)}>
+            <SelectTrigger className="h-8 w-[200px] text-xs"><SelectValue placeholder="Cuenta" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas las cuentas</SelectItem>
+              {cuentas.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="ml-auto flex items-center gap-3 text-xs">
+          <span>{filtradas.length} orden(es)</span>
+          {sinComprobante > 0 && (
+            <Badge variant="destructive" className="text-[10px]">{sinComprobante} sin comprobante</Badge>
+          )}
+          <span className="font-semibold">{money(total)}</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-xs text-muted-foreground">Cargando…</div>
+      ) : filtradas.length === 0 ? (
+        <div className="py-8 text-center text-xs text-muted-foreground">No hay pagos de contado en este rango.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left">Orden</th>
+                <th className="p-2 text-left">Placa</th>
+                <th className="p-2 text-left">Cliente</th>
+                <th className="p-2 text-left">Cuenta</th>
+                <th className="p-2 text-right">Valor</th>
+                <th className="p-2 text-center">Comprobante</th>
+                <th className="p-2 text-left">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtradas.map((o) => (
+                <tr key={o.id} className="border-t">
+                  <td className="p-2">{o.fechacargue}</td>
+                  <td className="p-2">{o.ordendecargue}</td>
+                  <td className="p-2">{o.placa}</td>
+                  <td className="p-2">{o.cliente || "-"}</td>
+                  <td className="p-2">{o.cuentatransferencia || "-"}</td>
+                  <td className="p-2 text-right">{money(Number(o.valorpago || 0))}</td>
+                  <td className="p-2 text-center">
+                    {o.comprobante ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px]"
+                        onClick={() => {
+                          setViendoComprobante(o)
+                          setIndiceImagen(0)
+                        }}
+                      >
+                        Ver
+                      </Button>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px]">Falta</Badge>
+                    )}
+                  </td>
+                  <td className="p-2">{o.estadofactura || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={!!viendoComprobante} onOpenChange={(v) => !v && setViendoComprobante(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Comprobante -- Orden {viendoComprobante?.ordendecargue}</DialogTitle>
+          </DialogHeader>
+          {urls.length > 0 && (
+            <div className="space-y-2">
+              {esComprobantePdf(urls[indiceImagen]) ? (
+                <a href={urls[indiceImagen]} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline">
+                  Abrir PDF en una pestaña nueva
+                </a>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={urls[indiceImagen]} alt="Comprobante" className="max-h-[60vh] w-full rounded object-contain" />
+              )}
+              {urls.length > 1 && (
+                <div className="flex items-center justify-center gap-2">
+                  <Button size="sm" variant="outline" disabled={indiceImagen === 0} onClick={() => setIndiceImagen((i) => i - 1)}>
+                    Anterior
+                  </Button>
+                  <span className="text-xs">{indiceImagen + 1} de {urls.length}</span>
+                  <Button size="sm" variant="outline" disabled={indiceImagen === urls.length - 1} onClick={() => setIndiceImagen((i) => i + 1)}>
+                    Siguiente
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
