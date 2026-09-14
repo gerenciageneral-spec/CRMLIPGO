@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
 import { registrarEventoCiclo, getCondicionesGeneracionPrefactura, generarPrefacturaAhora } from "@/lib/ciclo-facturacion-actions"
-import { ownerDePrefactura } from "@/lib/ciclo-facturacion-shared"
+import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
 import { construirPdfAnexoFacturacion } from "@/lib/anexo-facturacion-pdf"
 
 /**
@@ -46,11 +46,31 @@ function diaSemanaColombiaHoy(): number {
 }
 
 /**
+ * Día-del-mes de "ayer" y cantidad de días que tuvo ese mes (Colombia) --
+ * para la cadencia "cortes" (ver más abajo). Se deriva de la MISMA
+ * `fechaAyerColombiaISO` que ya usa `generarPrefacturaAhora` para calcular
+ * "hasta", así el disparo del cron y el período que termina generando la
+ * prefactura son siempre consistentes entre sí.
+ */
+function diaYUltimoDiaDelMesDeAyer(): { diaMesAyer: number; diasEnMesAyer: number } {
+  const [y, m, d] = fechaAyerColombiaISO().split("-").map(Number)
+  return { diaMesAyer: d, diasEnMesAyer: new Date(y, m, 0).getDate() }
+}
+
+/**
  * Decide, por proyecto, si HOY le toca generar (activo + frecuencia/día) y,
  * si le toca, delega TODA la lógica de generación a `generarPrefacturaAhora`
  * -- la MISMA función que usa el botón manual "Generar ahora" de la UI, para
  * que nunca existan 2 fórmulas paralelas del mismo cálculo (mismo principio
  * ya aplicado al bono de productividad de Parafiscales/PILA esta sesión).
+ *
+ * "Cortes" (varios días del mes, ej. [8,16,25], definidos por el Jefe): cada
+ * valor es el ÚLTIMO día incluido en su período -- el disparo real ocurre al
+ * día siguiente (mismo patrón que "semanal": dispara lunes, cubre hasta el
+ * domingo, vía el "hasta = ayer" que ya calcula `generarPrefacturaAhora`).
+ * Por eso aquí se compara contra el día-del-mes de AYER, no de hoy. Cada día
+ * configurado se recorta contra el último día real del mes de ayer, así un
+ * corte en 31 también sirve como "fin de mes" en los meses más cortos.
  */
 async function generarPrefacturasAutomaticas(hoy: number) {
   const resultado = { generadas: 0, omitidas: 0, errores: [] as { idempresa: number; error: string }[] }
@@ -61,12 +81,17 @@ async function generarPrefacturasAutomaticas(hoy: number) {
     return resultado
   }
 
+  const { diaMesAyer, diasEnMesAyer } = diaYUltimoDiaDelMesDeAyer()
+
   for (const cond of condiciones.data) {
     if (!cond.activo) {
       resultado.omitidas++
       continue
     }
-    const leToca = cond.frecuencia === "diario" || cond.dia_semana === hoy
+    const leToca =
+      cond.frecuencia === "diario" ||
+      (cond.frecuencia === "semanal" && cond.dia_semana === hoy) ||
+      (cond.frecuencia === "cortes" && (cond.dias_corte || []).some((d) => Math.min(d, diasEnMesAyer) === diaMesAyer))
     if (!leToca) {
       resultado.omitidas++
       continue

@@ -38,7 +38,7 @@ import {
   type SoporteLinea,
   type UnidadCobro,
 } from "@/lib/facturacion-control-actions"
-import { ownerDePrefactura } from "@/lib/ciclo-facturacion-shared"
+import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
 import { getUserPermissions } from "@/lib/permissions-actions"
 
 export type EstadoCiclo =
@@ -603,8 +603,16 @@ export async function actualizarCondicionEnvioAnexo(
 export interface CondicionGeneracionPrefactura {
   idempresa: number
   proyecto: string
-  frecuencia: "diario" | "semanal"
-  dia_semana: number | null // 0=domingo..6=sábado
+  frecuencia: "diario" | "semanal" | "cortes"
+  dia_semana: number | null // 0=domingo..6=sábado -- solo aplica si frecuencia="semanal"
+  /** Días del mes (1-31) en los que el Jefe quiere un corte -- ej. [8,16,25].
+   *  Cada valor es el ÚLTIMO día incluido en su período; el cron dispara al
+   *  día siguiente (mismo patrón que "semanal": dispara lunes, cubre hasta
+   *  el domingo) y recorta contra el último día real del mes, así que un
+   *  corte en 31 también sirve como "fin de mes" en meses más cortos. Se
+   *  repite todos los meses sin volver a configurarse. Solo aplica si
+   *  frecuencia="cortes". */
+  dias_corte: number[]
   activo: boolean
   /** Fecha desde la que factura la PRIMERA prefactura automática de este
    *  proyecto, si nunca ha tenido ninguna (ver Fase A del cron). Decisión
@@ -626,17 +634,18 @@ export async function getCondicionesGeneracionPrefactura(): Promise<{ success: b
     const sb: any = await getSupabaseAdmin()
     const { data: empresas, error: errEmp } = await sb.from("empresas_permisos").select("id, nombre").in("id", [1, 2, 3, 4]).order("id")
     if (errEmp) return { success: false, data: [], message: errEmp.message }
-    const { data: condiciones, error: errCond } = await sb.from("condiciones_generacion_prefactura").select("idempresa, frecuencia, dia_semana, activo, fecha_inicio")
+    const { data: condiciones, error: errCond } = await sb.from("condiciones_generacion_prefactura").select("idempresa, frecuencia, dia_semana, dias_corte, activo, fecha_inicio")
     if (errCond) return { success: false, data: [], message: errCond.message }
-    const porEmpresa = new Map<number, { frecuencia: string; dia_semana: number | null; activo: boolean; fecha_inicio: string | null }>()
+    const porEmpresa = new Map<number, { frecuencia: string; dia_semana: number | null; dias_corte: number[] | null; activo: boolean; fecha_inicio: string | null }>()
     for (const c of condiciones || []) porEmpresa.set(c.idempresa, c)
     const out: CondicionGeneracionPrefactura[] = (empresas || []).map((e: any) => {
       const c = porEmpresa.get(e.id)
       return {
         idempresa: e.id,
         proyecto: e.nombre,
-        frecuencia: (c?.frecuencia as "diario" | "semanal") || "semanal",
+        frecuencia: (c?.frecuencia as "diario" | "semanal" | "cortes") || "semanal",
         dia_semana: c ? c.dia_semana : 1,
+        dias_corte: c?.dias_corte ?? [],
         activo: c?.activo === true,
         fecha_inicio: c?.fecha_inicio ?? null,
       }
@@ -649,20 +658,35 @@ export async function getCondicionesGeneracionPrefactura(): Promise<{ success: b
 
 export async function actualizarCondicionGeneracionPrefactura(
   idempresa: number,
-  frecuencia: "diario" | "semanal",
+  frecuencia: "diario" | "semanal" | "cortes",
   dia_semana: number | null,
   activo: boolean,
   fecha_inicio: string | null,
+  dias_corte: number[] | null = null,
 ): Promise<{ success: boolean; message?: string }> {
   if (!idempresa) return { success: false, message: "Falta el proyecto." }
   if (frecuencia === "semanal" && (dia_semana === null || dia_semana < 0 || dia_semana > 6)) {
     return { success: false, message: "Selecciona un día de la semana válido." }
   }
+  const diasCorteLimpios = Array.from(new Set((dias_corte || []).filter((d) => Number.isInteger(d) && d >= 1 && d <= 31))).sort((a, b) => a - b)
+  if (frecuencia === "cortes" && diasCorteLimpios.length === 0) {
+    return { success: false, message: "Agrega al menos un día de corte (1-31)." }
+  }
   try {
     const sb: any = await getSupabaseAdmin()
     const { error } = await sb
       .from("condiciones_generacion_prefactura")
-      .upsert({ idempresa, frecuencia, dia_semana: frecuencia === "diario" ? null : dia_semana, activo, fecha_inicio: fecha_inicio || null }, { onConflict: "idempresa" })
+      .upsert(
+        {
+          idempresa,
+          frecuencia,
+          dia_semana: frecuencia === "semanal" ? dia_semana : null,
+          dias_corte: frecuencia === "cortes" ? diasCorteLimpios : null,
+          activo,
+          fecha_inicio: fecha_inicio || null,
+        },
+        { onConflict: "idempresa" },
+      )
     if (error) return { success: false, message: error.message }
     return { success: true }
   } catch (e: any) {
@@ -679,16 +703,6 @@ function diaSiguienteISO(fechaISO: string): string {
   const m = String(d.getMonth() + 1).padStart(2, "0")
   const dd = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${dd}`
-}
-
-function fechaAyerColombiaISO(): string {
-  const ahora = new Date()
-  const colombia = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Bogota" }))
-  colombia.setDate(colombia.getDate() - 1)
-  const y = colombia.getFullYear()
-  const m = String(colombia.getMonth() + 1).padStart(2, "0")
-  const d = String(colombia.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
 }
 
 export interface ResultadoGeneracionOwner {

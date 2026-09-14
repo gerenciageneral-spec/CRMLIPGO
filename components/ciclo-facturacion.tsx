@@ -52,7 +52,7 @@ import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-uploader"
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, Settings2, Wallet } from "lucide-react"
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, Settings2, Wallet, X } from "lucide-react"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -945,6 +945,34 @@ function ModalPago({
   )
 }
 
+/**
+ * Próxima fecha (DD/MM) en la que el cron dispararía la generación
+ * automática para esta lista de cortes -- solo una guía visual en pantalla
+ * para que el Jefe vea de inmediato que quedó bien configurado, no cambia
+ * ningún cálculo real (ese vive en el cron). Mismo recorte de fin de mes.
+ */
+function proximoCorteLabel(diasCorte: number[]): string {
+  if (!diasCorte.length) return ""
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const candidatos: Date[] = []
+  for (let offsetMes = 0; offsetMes <= 2; offsetMes++) {
+    const y = hoy.getFullYear()
+    const m = hoy.getMonth() + offsetMes
+    const diasEnMes = new Date(y, m + 1, 0).getDate()
+    for (const d of diasCorte) {
+      const efectivo = Math.min(d, diasEnMes)
+      const disparo = new Date(y, m, efectivo + 1) // dispara al día siguiente del corte
+      if (disparo >= hoy) candidatos.push(disparo)
+    }
+  }
+  if (!candidatos.length) return ""
+  candidatos.sort((a, b) => a.getTime() - b.getTime())
+  const prox = candidatos[0]
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${p(prox.getDate())}/${p(prox.getMonth() + 1)}`
+}
+
 function FrecuenciaGeneracionPrefacturaPanel() {
   const { toast } = useToast()
   const { user } = useAuth() as any
@@ -953,6 +981,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
   const [condiciones, setCondiciones] = useState<CondicionGeneracionPrefactura[]>([])
   const [guardando, setGuardando] = useState<number | null>(null)
   const [generando, setGenerando] = useState<number | null>(null)
+  const [nuevoCorte, setNuevoCorte] = useState<Record<number, string>>({})
 
   const cargar = async () => {
     const r = await getCondicionesGeneracionPrefactura()
@@ -968,7 +997,7 @@ function FrecuenciaGeneracionPrefacturaPanel() {
 
   const guardar = async (c: CondicionGeneracionPrefactura) => {
     setGuardando(c.idempresa)
-    const r = await actualizarCondicionGeneracionPrefactura(c.idempresa, c.frecuencia, c.dia_semana, c.activo, c.fecha_inicio)
+    const r = await actualizarCondicionGeneracionPrefactura(c.idempresa, c.frecuencia, c.dia_semana, c.activo, c.fecha_inicio, c.dias_corte)
     setGuardando(null)
     if (r.success) toast({ title: "Guardado" })
     else toast({ title: "Error", description: r.message, variant: "destructive" })
@@ -1008,22 +1037,28 @@ function FrecuenciaGeneracionPrefacturaPanel() {
         </CardDescription>
       </CardHeader>
       {abierto && (
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           {condiciones.map((c) => (
-            <div key={c.idempresa} className="flex flex-wrap items-center gap-2">
+            <div key={c.idempresa} className="flex flex-wrap items-center gap-2 rounded-md border p-2">
               <label className="flex w-40 items-center gap-2 text-xs">
                 <Switch checked={c.activo} onCheckedChange={(v) => actualizarLocal(c.idempresa, { activo: v })} />
                 {c.proyecto}
               </label>
               <Select
                 value={c.frecuencia}
-                onValueChange={(v) => actualizarLocal(c.idempresa, { frecuencia: v as "diario" | "semanal", dia_semana: v === "semanal" ? (c.dia_semana ?? 1) : c.dia_semana })}
+                onValueChange={(v) =>
+                  actualizarLocal(c.idempresa, {
+                    frecuencia: v as "diario" | "semanal" | "cortes",
+                    dia_semana: v === "semanal" ? (c.dia_semana ?? 1) : c.dia_semana,
+                  })
+                }
                 disabled={!c.activo}
               >
-                <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="semanal">Semanal</SelectItem>
                   <SelectItem value="diario">Diario</SelectItem>
+                  <SelectItem value="cortes">Cortes del mes</SelectItem>
                 </SelectContent>
               </Select>
               {c.frecuencia === "semanal" && (
@@ -1060,6 +1095,65 @@ function FrecuenciaGeneracionPrefacturaPanel() {
                 {generando === c.idempresa && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                 Generar ahora
               </Button>
+
+              {c.frecuencia === "cortes" && (
+                <div className="w-full space-y-1.5 pl-1 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {c.dias_corte.length === 0 && (
+                      <span className="text-[11px] text-muted-foreground">Sin días de corte todavía.</span>
+                    )}
+                    {c.dias_corte.map((d) => (
+                      <Badge key={d} variant="secondary" className="gap-1 text-[11px]">
+                        Día {d}
+                        <button
+                          type="button"
+                          className="rounded-full hover:bg-muted-foreground/20"
+                          onClick={() => actualizarLocal(c.idempresa, { dias_corte: c.dias_corte.filter((x) => x !== d) })}
+                          disabled={!c.activo}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <Input
+                      type="number"
+                      min={1}
+                      max={31}
+                      placeholder="Día (1-31)"
+                      value={nuevoCorte[c.idempresa] ?? ""}
+                      onChange={(e) => setNuevoCorte((prev) => ({ ...prev, [c.idempresa]: e.target.value }))}
+                      className="h-7 w-24 text-xs"
+                      disabled={!c.activo}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={!c.activo}
+                      onClick={() => {
+                        const n = Number(nuevoCorte[c.idempresa])
+                        if (!Number.isInteger(n) || n < 1 || n > 31) return
+                        if (!c.dias_corte.includes(n)) {
+                          actualizarLocal(c.idempresa, { dias_corte: [...c.dias_corte, n].sort((a, b) => a - b) })
+                        }
+                        setNuevoCorte((prev) => ({ ...prev, [c.idempresa]: "" }))
+                      }}
+                    >
+                      Agregar corte
+                    </Button>
+                    {c.dias_corte.length > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        Próximo corte automático: <strong>{proximoCorteLabel(c.dias_corte)}</strong>
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Cada corte es el ÚLTIMO día incluido en su período -- el siguiente arranca solo al día siguiente, sin pisarse.
+                    Un corte en 31 también cubre fin de mes en los meses más cortos. Se repite todos los meses sin que tengas que
+                    volver a configurarlo.
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </CardContent>
@@ -1255,16 +1349,31 @@ function PagosContadoPanel({
     let cancelado = false
     const cargar = async () => {
       setLoading(true)
-      const params = new URLSearchParams({ medioPago: "Contado", pageSize: "500" })
-      if (empresaId) params.set("empresaId", String(empresaId))
-      if (periodoDesde) params.set("fechaCargueDesde", periodoDesde)
-      if (periodoHasta) params.set("fechaCargueHasta", periodoHasta)
       try {
-        const res = await fetch(`/api/gestion-facturas?${params.toString()}`)
-        const json = await res.json()
-        if (cancelado) return
-        if (json.success) setOrdenes(json.data)
-        else toast({ title: "Error", description: json.error, variant: "destructive" })
+        // Sin tope: pagina hasta agotar TODO el historial que matchee el
+        // filtro -- un solo pageSize=500 recortaba en silencio proyectos con
+        // más de 500 pagos de contado acumulados, justo lo que este tab
+        // necesita para poder cruzar contra el banco (usuario 2026-09-14).
+        const acumulado: OrdenContado[] = []
+        let page = 1
+        for (;;) {
+          const params = new URLSearchParams({ medioPago: "Contado", pageSize: "500", page: String(page) })
+          if (empresaId) params.set("empresaId", String(empresaId))
+          if (periodoDesde) params.set("fechaCargueDesde", periodoDesde)
+          if (periodoHasta) params.set("fechaCargueHasta", periodoHasta)
+          const res = await fetch(`/api/gestion-facturas?${params.toString()}`)
+          const json = await res.json()
+          if (cancelado) return
+          if (!json.success) {
+            toast({ title: "Error", description: json.error, variant: "destructive" })
+            break
+          }
+          acumulado.push(...json.data)
+          const totalPages = json.pagination?.totalPages || 1
+          if (page >= totalPages) break
+          page++
+        }
+        if (!cancelado) setOrdenes(acumulado)
       } catch (e: any) {
         if (!cancelado) toast({ title: "Error", description: e?.message || "No se pudo cargar", variant: "destructive" })
       }
