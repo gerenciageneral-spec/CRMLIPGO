@@ -397,6 +397,11 @@ export interface PrefacturaLinea {
   valorServicio: number // toneladas × tarifaServicio (para que el soporte cuadre con el resumen)
   estadofactura: string | null
   categoria: CategoriaFactura // semáforo: sin_gestionar=por facturar · en_proceso · facturado
+  /** Medio de pago de la orden (Contado/Crédito) -- para distinguir, dentro
+   *  de "en_proceso", lo que el Coordinador validó como CRÉDITO real (ver
+   *  valorListoParaAnexo) de los ~casos de Contado que por error de flujo
+   *  también quedan en "CF - Factura solicitada". */
+  mediopago: string | null
   /** Unidad de `toneladas`/`valorServicio`. "u" = por unidad (ver esProductoPorUnidad). */
   unidad: UnidadCobro
 }
@@ -413,6 +418,16 @@ export interface PrefacturaResumen {
   valorEnProceso: number // factura solicitada / a crédito (ámbar)
   tonFacturado: number
   valorFacturado: number // ya facturado — NO volver a facturar (rojo)
+  /** Subconjunto de "en_proceso": el Coordinador YA validó la orden en
+   *  Gestión de Facturas (estadofactura="CF - Factura solicitada") Y es
+   *  Crédito real (no Contado por error de flujo). Esto -- NO
+   *  `valorPorFacturar` -- es lo que Ciclo de Facturación debe usar para
+   *  bloque "operación" (ver valorListoParaAnexo/tonListoParaAnexo):
+   *  confirmado por el usuario 2026-09-14, "la solicitud de facturas a
+   *  crédito es la que arma el cuadro control que a su vez alimenta el
+   *  ciclo de facturación, sin estos anexos no se puede cobrar". */
+  tonValidadoCredito: number
+  valorValidadoCredito: number
   /** DE DÓNDE SALE EL DATO. "ordenes" = una orden de cargue procesada (tiene
    *  semáforo de factura Siigo y detalle por orden). "produccion" = concepto
    *  sin orden detrás (tolva de Avimol, horas extra): no tiene marca de
@@ -429,6 +444,7 @@ export interface PrefacturaResumen {
    *  se sumarían al tonelaje del documento. */
   unidad: UnidadCobro
 }
+
 export interface Prefactura {
   origen: PrefacturaLinea[]
   resumen: PrefacturaResumen[]
@@ -861,11 +877,11 @@ export async function getPrefactura(
     // El estado dice qué ya se gestionó (para el semáforo y NO facturar doble): en
     // Medellín los descargues ya se facturan a las transportadoras y quedan con estado.
     const procesadas = new Set<string>()
-    const estadoPorOrden = new Map<string, { estado: string | null; facturasiigo: string | null; pesovascula: number }>()
+    const estadoPorOrden = new Map<string, { estado: string | null; facturasiigo: string | null; pesovascula: number; mediopago: string | null }>()
     for (let offset = 0; ; offset += 1000) {
       const { data, error } = await sb
         .from("cabeceraoc")
-        .select("ordendecargue, fincargue, facturar, tipooperacion, estadofactura, facturasiigo, pesovascula")
+        .select("ordendecargue, fincargue, facturar, tipooperacion, estadofactura, facturasiigo, pesovascula, mediopago")
         .eq("idempresa", idempresa)
         .neq("tipooperacion", "proyeccion")
         .range(offset, offset + 999)
@@ -882,6 +898,7 @@ export async function getPrefactura(
           estado: o.estadofactura ?? previo?.estado ?? null,
           facturasiigo: o.facturasiigo ?? previo?.facturasiigo ?? null,
           pesovascula: (previo?.pesovascula ?? 0) + num(o.pesovascula),
+          mediopago: o.mediopago ?? previo?.mediopago ?? null,
         })
         if (o.fincargue && o.facturar !== false) procesadas.add(on)
       }
@@ -1024,6 +1041,7 @@ export async function getPrefactura(
           valorServicio: cantidadFacturable * tarifaFacturada,
           estadofactura,
           categoria: categoriaDeFactura(est?.facturasiigo, estadofactura),
+          mediopago: est?.mediopago ?? null,
           unidad: porUnidad ? "u" : "t",
         }
         origen.push(linea)
@@ -1085,7 +1103,7 @@ export async function getPrefactura(
         {
           owner: l.owner, operacion: op, toneladas: 0, tarifa: l.tarifaServicio, valor: 0,
           tonPorFacturar: 0, valorPorFacturar: 0, tonEnProceso: 0, valorEnProceso: 0,
-          tonFacturado: 0, valorFacturado: 0,
+          tonFacturado: 0, valorFacturado: 0, tonValidadoCredito: 0, valorValidadoCredito: 0,
           fuente: "ordenes" as const, bloque: "operacion" as const, unidad: l.unidad,
         }
       // Valor POR LÍNEA (ya calculado con la tarifa del owner/operación real).
@@ -1098,6 +1116,10 @@ export async function getPrefactura(
       } else if (l.categoria === "en_proceso") {
         r.tonEnProceso += l.toneladas
         r.valorEnProceso += v
+        if (l.estadofactura === "CF - Factura solicitada" && l.mediopago === "Crédito") {
+          r.tonValidadoCredito += l.toneladas
+          r.valorValidadoCredito += v
+        }
       } else {
         r.tonPorFacturar += l.toneladas
         r.valorPorFacturar += v
@@ -1211,6 +1233,8 @@ export async function getPrefactura(
             valorEnProceso: 0,
             tonFacturado: 0,
             valorFacturado: 0,
+            tonValidadoCredito: 0,
+            valorValidadoCredito: 0,
             fuente: "produccion",
             bloque: "produccion",
             unidad: c.unidad,
@@ -1258,6 +1282,8 @@ export async function getPrefactura(
             valorEnProceso: 0,
             tonFacturado: 0,
             valorFacturado: 0,
+            tonValidadoCredito: 0,
+            valorValidadoCredito: 0,
             fuente: "produccion",
             bloque: "produccion",
             unidad: c.unidad,

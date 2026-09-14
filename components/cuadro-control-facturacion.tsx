@@ -29,6 +29,7 @@ import {
   Check,
   Trash2,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react"
 import * as XLSX from "xlsx"
 import {
@@ -933,6 +934,9 @@ export function CuadroControlFacturacion() {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={cargar} disabled={loading} title="Recargar sin cambiar los filtros">
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Actualizar
+            </Button>
             <Button size="sm" variant="outline" onClick={exportarDetalle} disabled={!data || data.filas.length === 0}>
               <Download className="mr-2 h-4 w-4" /> Detalle
             </Button>
@@ -1468,7 +1472,23 @@ export function CuadroControlFacturacion() {
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           ¿Qué facturar? ({selKeys.size}/{pref.resumen.length} conceptos)
                         </span>
-                        <div className="flex gap-3 text-xs">
+                        <div className="flex items-center gap-3 text-xs">
+                          {pref.resumen.some((x) => x.bloque === "operacion" && x.valorPorFacturar > 0) && (
+                            <button
+                              type="button"
+                              className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
+                              title="Ir a Gestión de Facturas a validar las órdenes marcadas 'sin validar' abajo"
+                              onClick={() =>
+                                window.dispatchEvent(
+                                  new CustomEvent("lipgo:ir-a-gestionar-facturas", {
+                                    detail: { empresaId, estado: "pendiente", fechaDesde: filtros.desde, fechaHasta: filtros.hasta },
+                                  }),
+                                )
+                              }
+                            >
+                              Ir a gestionar las sin validar
+                            </button>
+                          )}
                           <button className="text-primary hover:underline" onClick={() => setSelKeys(new Set(pref.resumen.map((x) => keyRes(x.owner, x.operacion, x.unidad))))}>
                             Todo
                           </button>
@@ -1495,6 +1515,14 @@ export function CuadroControlFacturacion() {
                                 {x.bloque === "produccion" && (
                                   <span className="ml-1 rounded bg-sky-100 px-1 py-px text-[9px] font-semibold uppercase text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
                                     prod
+                                  </span>
+                                )}
+                                {x.bloque === "operacion" && x.valorPorFacturar > 0 && (
+                                  <span
+                                    className="ml-1 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                    title="El Coordinador aún no validó estas órdenes en Gestión de Facturas -- Ciclo de Facturación no las incluirá en el próximo anexo"
+                                  >
+                                    sin validar
                                   </span>
                                 )}
                                 {soloFacturado && <span className="ml-1 text-[10px] text-red-500">(ya facturado)</span>}

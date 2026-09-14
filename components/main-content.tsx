@@ -199,10 +199,20 @@ export function MainContent({
   const [sanitaryRegistryVehicleId, setSanitaryRegistryVehicleId] = React.useState<number | null>(null) // Added state to store initial vehicle ID for Sanitary Registry module
   // Identificación a preseleccionar al saltar desde "Ausentismo acumulado" (Visor de Asistencia) hasta Ausentismos.
   const [ausentismosInitialSearch, setAusentismosInitialSearch] = React.useState<string | null>(null)
+  // Salto directo desde Ciclo de Facturación/Cuadro de Control ("N órdenes
+  // sin gestionar") hasta Gestión de Facturas, ya filtrado en el proyecto y
+  // período correctos -- para que el aviso sirva para ACTUAR, no solo para
+  // informar (usuario 2026-09-14: "que no sea solo lectura que sirva para
+  // gestionar").
+  const [gestionFacturasFiltroInicial, setGestionFacturasFiltroInicial] = React.useState<{
+    estado?: string
+    fechaDesde?: string
+    fechaHasta?: string
+  } | null>(null)
 
   // Saludo del hero: personalizado por hora del día + nombre + empresa. Se
   // calcula en useEffect para no romper la hidratación (hora del server ≠ cliente).
-  const { profile, selectedEmpresaId, selectedEmpresaNombre } = useAuth()
+  const { profile, selectedEmpresaId, selectedEmpresaNombre, setSelectedEmpresaId } = useAuth()
   const [nowInfo, setNowInfo] = React.useState<{ saludo: string; fecha: string }>({ saludo: "Hola", fecha: "" })
   const [homeAlertas, setHomeAlertas] = React.useState<AtencionItem[]>([])
   React.useEffect(() => {
@@ -324,16 +334,29 @@ export function MainContent({
       onSelectModule("Ausentismos")
     }
 
+    const handleIrAGestionarFacturas = (event: Event) => {
+      const customEvent = event as CustomEvent<{ empresaId?: number | null; estado?: string; fechaDesde?: string; fechaHasta?: string }>
+      if (customEvent.detail.empresaId) setSelectedEmpresaId(customEvent.detail.empresaId)
+      setGestionFacturasFiltroInicial({
+        estado: customEvent.detail.estado,
+        fechaDesde: customEvent.detail.fechaDesde,
+        fechaHasta: customEvent.detail.fechaHasta,
+      })
+      onSelectModule("Gestión de Facturas")
+    }
+
     window.addEventListener("navigate-to-bascula", handleNavigateToBascula)
     window.addEventListener("navigate-to-sanitary-registry", handleNavigateToSanitaryRegistry)
     window.addEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
+    window.addEventListener("lipgo:ir-a-gestionar-facturas", handleIrAGestionarFacturas)
 
     return () => {
       window.removeEventListener("navigate-to-bascula", handleNavigateToBascula)
       window.removeEventListener("navigate-to-sanitary-registry", handleNavigateToSanitaryRegistry)
       window.removeEventListener("lipgo:ver-ausentismos-persona", handleVerAusentismosPersona)
+      window.removeEventListener("lipgo:ir-a-gestionar-facturas", handleIrAGestionarFacturas)
     }
-  }, [onSelectModule])
+  }, [onSelectModule, setSelectedEmpresaId])
 
   const configDef = getConfigModule(selectedModule)
 
@@ -1071,7 +1094,11 @@ export function MainContent({
             </PermissionGuard>
           ) : selectedModule === "Gestión de Facturas" ? (
             <PermissionGuard moduleName="Gestión de Facturas">
-              <GestionFacturas onBack={onBack} />
+              <GestionFacturas
+                onBack={onBack}
+                filtroInicial={gestionFacturasFiltroInicial}
+                onFiltroInicialConsumido={() => setGestionFacturasFiltroInicial(null)}
+              />
             </PermissionGuard>
           ) : selectedModule === "Dashboard Operaciones LIP" ? (
             <PermissionGuard moduleName="Dashboard Operaciones LIP">

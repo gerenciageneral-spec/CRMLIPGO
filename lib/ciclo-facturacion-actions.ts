@@ -38,6 +38,7 @@ import {
   type SoporteLinea,
   type UnidadCobro,
 } from "@/lib/facturacion-control-actions"
+import { valorListoParaAnexo, tonListoParaAnexo } from "@/lib/facturacion-control-shared"
 import { ownerDePrefactura, fechaAyerColombiaISO } from "@/lib/ciclo-facturacion-shared"
 import { getUserPermissions } from "@/lib/permissions-actions"
 
@@ -841,7 +842,7 @@ export async function generarPrefacturaAhora(
     if (!descubrir.success || !descubrir.data) {
       return { success: false, estado: "error", mensaje: descubrir.message || "No se pudo calcular la prefactura.", resultados: [] }
     }
-    const ownersConPendiente = Array.from(new Set(descubrir.data.resumen.filter((r) => r.valorPorFacturar > 0).map((r) => r.owner))).sort()
+    const ownersConPendiente = Array.from(new Set(descubrir.data.resumen.filter((r) => valorListoParaAnexo(r) > 0).map((r) => r.owner))).sort()
     if (ownersConPendiente.length === 0) {
       return { success: true, estado: "sin_pendientes", mensaje: `No hay nada por facturar entre ${desdeMasAntiguo} y ${hasta}.`, resultados: [] }
     }
@@ -882,13 +883,13 @@ export async function generarPrefacturaAhora(
       }
       const pref = prefR.data
       const lineas = pref.resumen
-        .filter((r) => r.owner === owner && r.valorPorFacturar > 0)
+        .filter((r) => r.owner === owner && valorListoParaAnexo(r) > 0)
         .map((r) => ({
           owner: r.owner,
           servicio: r.operacion,
-          toneladas: Number(r.tonPorFacturar.toFixed(3)),
+          toneladas: Number(tonListoParaAnexo(r).toFixed(3)),
           tarifa: r.tarifa,
-          total: Math.round(r.valorPorFacturar),
+          total: Math.round(valorListoParaAnexo(r)),
           fuente: r.fuente,
           unidad: r.unidad,
         }))
@@ -896,9 +897,19 @@ export async function generarPrefacturaAhora(
         resultados.push({ owner, success: true, estado: "nada_que_facturar", mensaje: `No hay nada por facturar entre ${desdeOwner} y ${hasta}.`, periodo: { desde: desdeOwner, hasta } })
         continue
       }
+      // Bloque por grupo (owner|||operación|||unidad) -- necesario para saber,
+      // línea por línea del detalle, si pertenece a un grupo "producción" (sin
+      // validación por-orden, ej. Tolva) o "operación" (exige que el
+      // Coordinador ya haya validado esa orden en Gestión de Facturas).
+      const bloquePorGrupo = new Map(pref.resumen.map((r) => [`${r.owner}|||${r.operacion}|||${r.unidad}`, r.bloque]))
       const soporte = [
         ...pref.origen
-          .filter((l) => l.owner === owner && l.categoria !== "facturado")
+          .filter((l) => {
+            if (l.owner !== owner) return false
+            const bloque = bloquePorGrupo.get(`${l.owner}|||${l.grupoResumen}|||${l.unidad}`)
+            if (bloque === "produccion") return l.categoria !== "facturado"
+            return l.estadofactura === "CF - Factura solicitada" && l.mediopago === "Crédito"
+          })
           .map((l) => ({
             owner: l.owner,
             operacion: l.grupoResumen || "",
@@ -925,6 +936,21 @@ export async function generarPrefacturaAhora(
         if (t.ordenes_medio_pago > 0) advertencias.push({ tipo: "pago_no_cuadra", detalle: `${t.ordenes_medio_pago} orden(es) con medio de pago inconsistente -- todo el proyecto` })
         if (ctrlR.data.produccionAviso) advertencias.push({ tipo: "produccion_aviso", detalle: ctrlR.data.produccionAviso })
         for (const al of ctrlR.data.produccionAlertas || []) advertencias.push({ tipo: "produccion_alerta", detalle: al })
+      }
+      // Órdenes de este owner/período que el Coordinador AÚN no ha validado en
+      // Gestión de Facturas -- se generó igual (con lo que sí está validado),
+      // pero esto queda sin facturar hasta que se valide y entre en un
+      // próximo corte. Solo bloque "operación" -- Tolva/producción no aplica.
+      const sinGestionar = pref.resumen.filter((r) => r.owner === owner && r.bloque === "operacion" && r.valorPorFacturar > 0)
+      if (sinGestionar.length > 0) {
+        const valorSinGestionar = Math.round(sinGestionar.reduce((s, r) => s + r.valorPorFacturar, 0))
+        const numOrdenes = new Set(
+          pref.origen.filter((l) => l.owner === owner && l.categoria === "sin_gestionar").map((l) => l.numeroorden),
+        ).size
+        advertencias.push({
+          tipo: "ordenes_sin_gestionar",
+          detalle: `$${valorSinGestionar.toLocaleString("es-CO")} en ${numOrdenes} orden(es) de este período siguen sin validar por el Coordinador (Gestión de Facturas) y quedaron FUERA de este anexo.`,
+        })
       }
       if (rangoManual && desdeAutomatico && desdeOwner !== desdeAutomatico) {
         advertencias.push({
@@ -965,6 +991,82 @@ export async function generarPrefacturaAhora(
     }
   } catch (e: any) {
     return { success: false, estado: "error", mensaje: e?.message || "Error inesperado al generar la prefactura.", resultados: [] }
+  }
+}
+
+export interface PendienteGestionOwner {
+  owner: string
+  valorSinGestionar: number
+  ordenes: number
+}
+export interface ResultadoPendienteGestion {
+  success: boolean
+  message?: string
+  periodo?: { desde: string; hasta: string }
+  porOwner: PendienteGestionOwner[]
+}
+
+/**
+ * Solo-lectura -- NO guarda nada. Para el período que le tocaría generar a
+ * este proyecto AHORA MISMO (mismo cálculo de `desde` que usa
+ * `generarPrefacturaAhora`), cuánto valor de bloque "operación" sigue SIN
+ * validar por el Coordinador en Gestión de Facturas -- o sea, lo que
+ * quedaría FUERA del próximo anexo si se generara ya. Pensado para el
+ * aviso proactivo en la UI, pedido por el usuario 2026-09-14: "que informe
+ * si se está quedando alguna de estas órdenes por fuera del corte por no
+ * tener gestión de factura realizada por el coordinador".
+ */
+export async function previsualizarPendienteGestion(idempresa: number): Promise<ResultadoPendienteGestion> {
+  try {
+    const sb: any = await getSupabaseAdmin()
+    const { data: cond } = await sb
+      .from("condiciones_generacion_prefactura")
+      .select("fecha_inicio")
+      .eq("idempresa", idempresa)
+      .maybeSingle()
+    const fechaInicioProyecto: string | null = cond?.fecha_inicio || null
+    const hasta = fechaAyerColombiaISO()
+
+    const { data: previas } = await sb
+      .from("prefacturas")
+      .select("owner, periodo_hasta")
+      .eq("idempresa", idempresa)
+      .eq("origen", "cuadro_control")
+      .eq("estado", "aprobada")
+      .not("owner", "is", null)
+      .order("periodo_hasta", { ascending: false })
+    const ultimaPorOwner = new Map<string, string>()
+    for (const p of previas || []) {
+      if (!ultimaPorOwner.has(p.owner)) ultimaPorOwner.set(p.owner, p.periodo_hasta)
+    }
+    const desdeMasAntiguo = previas && previas.length > 0 ? [...ultimaPorOwner.values()].map(diaSiguienteISO).sort()[0] : fechaInicioProyecto
+    if (!desdeMasAntiguo || desdeMasAntiguo > hasta) {
+      return { success: true, porOwner: [] }
+    }
+
+    const r = await getPrefactura(idempresa, { desde: desdeMasAntiguo, hasta })
+    if (!r.success || !r.data) return { success: false, message: r.message, porOwner: [] }
+
+    const porOwnerMap = new Map<string, { valor: number; ordenes: Set<string> }>()
+    for (const row of r.data.resumen) {
+      if (row.bloque !== "operacion" || row.valorPorFacturar <= 0) continue
+      const acc = porOwnerMap.get(row.owner) || { valor: 0, ordenes: new Set<string>() }
+      acc.valor += row.valorPorFacturar
+      porOwnerMap.set(row.owner, acc)
+    }
+    for (const l of r.data.origen) {
+      if (l.categoria === "sin_gestionar" && porOwnerMap.has(l.owner)) {
+        porOwnerMap.get(l.owner)!.ordenes.add(l.numeroorden)
+      }
+    }
+    const porOwner = Array.from(porOwnerMap.entries()).map(([owner, v]) => ({
+      owner,
+      valorSinGestionar: Math.round(v.valor),
+      ordenes: v.ordenes.size,
+    }))
+    return { success: true, periodo: { desde: desdeMasAntiguo, hasta }, porOwner }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Error al calcular pendientes de gestión.", porOwner: [] }
   }
 }
 

@@ -22,6 +22,11 @@ import { GESTION_LIPGO_DESDE } from "@/lib/facturacion-constantes"
 
 interface GestionFacturasProps {
   onBack?: () => void
+  /** Salto directo desde el aviso "N órdenes sin gestionar" de Ciclo de
+   *  Facturación/Cuadro de Control -- deja la pantalla ya filtrada en el
+   *  período/estado que hay que revisar, en vez de un aviso solo-lectura. */
+  filtroInicial?: { estado?: string; fechaDesde?: string; fechaHasta?: string } | null
+  onFiltroInicialConsumido?: () => void
 }
 
 interface OrdenCargue {
@@ -74,7 +79,7 @@ const CUENTAS_TRANSFERENCIA = [
   "Efectivo",
 ]
 
-export default function GestionFacturas({ onBack }: GestionFacturasProps) {
+export default function GestionFacturas({ onBack, filtroInicial, onFiltroInicialConsumido }: GestionFacturasProps) {
   const { selectedEmpresaId } = useAuth()
   const [loading, setLoading] = useState(true)
   const [ordenes, setOrdenes] = useState<OrdenCargue[]>([])
@@ -102,6 +107,22 @@ export default function GestionFacturas({ onBack }: GestionFacturasProps) {
     medioPago: "",
     cuenta: "",
   })
+
+  // Aplica el filtro que llega desde el salto de Ciclo de
+  // Facturación/Cuadro de Control (ver evento "lipgo:ir-a-gestionar-facturas"
+  // en main-content.tsx) y lo consume una sola vez -- para que una vuelta
+  // normal a este módulo (sin salto) no lo vuelva a aplicar.
+  useEffect(() => {
+    if (!filtroInicial) return
+    setFilters((f) => ({
+      ...f,
+      estado: filtroInicial.estado ?? f.estado,
+      fechaCargueDesde: filtroInicial.fechaDesde ?? f.fechaCargueDesde,
+      fechaCargueHasta: filtroInicial.fechaHasta ?? f.fechaCargueHasta,
+    }))
+    onFiltroInicialConsumido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroInicial])
 
   // Transportes REALES que existen para el proyecto seleccionado (lista
   // desplegable, no texto libre) — evita amarrar una factura Siigo al

@@ -36,6 +36,8 @@ import {
   getCondicionesGeneracionPrefactura,
   actualizarCondicionGeneracionPrefactura,
   generarPrefacturaAhora,
+  previsualizarPendienteGestion,
+  type PendienteGestionOwner,
   getSoporteDePrefactura,
   type PrefacturaCiclo,
   type EventoCiclo,
@@ -52,7 +54,7 @@ import { getAccessibleEmpresesFromPermisos } from "@/lib/orders-actions"
 import { AdjuntosUploader } from "@/components/ciclo-facturacion/adjuntos-uploader"
 import { SoporteAnexo } from "@/components/cuadro-control-facturacion"
 import type { SoporteLinea } from "@/lib/facturacion-control-actions"
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, Settings2, Wallet, X } from "lucide-react"
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock, FileClock, Inbox, Loader2, Receipt, RefreshCw, Settings2, Wallet, X } from "lucide-react"
 
 const money = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`
 
@@ -391,6 +393,10 @@ export default function CicloFacturacion() {
                   Ver todo el histórico
                 </Button>
               )}
+              <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={cargar} disabled={loading} title="Recargar sin cambiar los filtros">
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                Actualizar
+              </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
               Sin período seleccionado se trae todo lo accesible. El filtro aplica apenas cambias cualquier campo.
@@ -983,14 +989,37 @@ function FrecuenciaGeneracionPrefacturaPanel() {
   const [generando, setGenerando] = useState<number | null>(null)
   const [nuevoCorte, setNuevoCorte] = useState<Record<number, string>>({})
   const [rangoManual, setRangoManual] = useState<Record<number, { desde: string; hasta: string }>>({})
+  // Aviso proactivo: cuánto de cada proyecto sigue SIN validar por el
+  // Coordinador (quedaría fuera del próximo corte) -- pedido explícito del
+  // usuario 2026-09-14, "que sirva para gestionar" (no solo informar): el
+  // aviso trae un link directo a Gestión de Facturas, ya filtrado.
+  const [pendientes, setPendientes] = useState<Record<number, PendienteGestionOwner[]>>({})
+
+  const cargarPendientes = async (lista: CondicionGeneracionPrefactura[]) => {
+    const activos = lista.filter((c) => c.activo)
+    const resultados = await Promise.all(activos.map((c) => previsualizarPendienteGestion(c.idempresa)))
+    const mapa: Record<number, PendienteGestionOwner[]> = {}
+    activos.forEach((c, i) => {
+      const r = resultados[i]
+      if (r.success) mapa[c.idempresa] = r.porOwner.filter((o) => o.valorSinGestionar > 0)
+    })
+    setPendientes(mapa)
+  }
 
   const cargar = async () => {
     const r = await getCondicionesGeneracionPrefactura()
-    if (r.success) setCondiciones(r.data)
+    if (r.success) {
+      setCondiciones(r.data)
+      cargarPendientes(r.data)
+    }
   }
   useEffect(() => {
     if (abierto) cargar()
   }, [abierto])
+
+  const irAGestionar = (idempresa: number) => {
+    window.dispatchEvent(new CustomEvent("lipgo:ir-a-gestionar-facturas", { detail: { empresaId: idempresa, estado: "pendiente" } }))
+  }
 
   const actualizarLocal = (idempresa: number, patch: Partial<CondicionGeneracionPrefactura>) => {
     setCondiciones((prev) => prev.map((c) => (c.idempresa === idempresa ? { ...c, ...patch } : c)))
@@ -1050,7 +1079,22 @@ function FrecuenciaGeneracionPrefacturaPanel() {
       <CardHeader className="cursor-pointer pb-2" onClick={() => setAbierto((v) => !v)}>
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2"><Clock className="h-4 w-4" /> Automatización: generación de prefacturas por Proyecto</span>
-          {abierto ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          <span className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={(e) => {
+                e.stopPropagation()
+                cargar()
+              }}
+              title="Recargar condiciones y avisos de gestión pendiente"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Actualizar
+            </Button>
+            {abierto ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </span>
         </CardTitle>
         <CardDescription className="text-xs">
           Sin activar, la prefactura la sigue generando una persona a mano en Cuadro de Control / Prefactura de Producción -- ese sigue siendo el default.
@@ -1060,7 +1104,9 @@ function FrecuenciaGeneracionPrefacturaPanel() {
           adelante sigue solo. <strong>Usa "Generar ahora" para probarlo o para no esperar al cron de mañana</strong> -- hace exactamente lo mismo que
           la corrida automática, pero al instante y con el resultado a la vista. En proyectos no diarios, el cuadro punteado <strong>"Rango manual
           (excepción)"</strong> permite generar un tramo puntual con fechas exactas en vez del período contiguo automático -- para cierres
-          anticipados u otros casos fuera de lo normal.
+          anticipados u otros casos fuera de lo normal. <strong>Las órdenes de Cargue/Descargue/Distribución solo entran en el anexo cuando el
+          Coordinador ya las validó en Gestión de Facturas</strong> ("CF - Factura solicitada", con el tiquete de báscula o la foto de la orden) --
+          la Tolva/producción no necesita ese paso. Si algo sigue sin validar, aparece abajo con un link directo para ir a gestionarlo.
         </CardDescription>
       </CardHeader>
       {abierto && (
@@ -1207,6 +1253,17 @@ function FrecuenciaGeneracionPrefacturaPanel() {
                     Un corte en 31 también cubre fin de mes en los meses más cortos. Se repite todos los meses sin que tengas que
                     volver a configurarlo.
                   </p>
+                </div>
+              )}
+
+              {(pendientes[c.idempresa]?.length ?? 0) > 0 && (
+                <div className="w-full rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                  <AlertTriangle className="mr-1 inline h-3 w-3" />
+                  {pendientes[c.idempresa]!.map((o) => `${o.owner}: ${money(o.valorSinGestionar)} en ${o.ordenes} orden(es)`).join(" · ")}{" "}
+                  sin validar por el Coordinador -- quedarían fuera del próximo corte si se genera ahora.{" "}
+                  <button type="button" className="font-semibold underline hover:no-underline" onClick={() => irAGestionar(c.idempresa)}>
+                    Ir a gestionarlas
+                  </button>
                 </div>
               )}
             </div>
