@@ -95,7 +95,8 @@ export function PanelGestionHumanaLIP() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
               <KPI label="Colaboradores activos" valor={t.activos} Icon={Users} color={SST_TOKENS.navy} sub={`${t.vinculados} vinculados (incl. apoyo picos)`} />
               <KPI label="Cobertura de planta" valor={t.cobertura} unidad="%" Icon={UserCheck} color={colPct(t.cobertura, 100)} sub={`${t.activos}/${t.planta} planta acordada`} />
-              <KPI label="Ausentismo" valor={t.ausentismo} unidad="%" Icon={HeartPulse} color={colPct(t.ausentismo, 3, true)} sub={`${t.ausencias} turnos con incapacidad`} />
+              <KPI label="Ausentismo" valor={t.ausentismo} unidad="%" Icon={HeartPulse} color={colPct(t.ausentismo, 3, true)} sub={`${t.ausencias} ausencias vs headcount del período`} />
+              <KPI label="Capacidad de respuesta" valor={t.capacidadRespuesta} unidad="%" Icon={HeartPulse} color={colPct(t.capacidadRespuesta, 3, true)} sub="ausencias / turnos programados (control diario)" />
               <KPI label="Idoneidad documental" valor={t.idoneidad} unidad="%" Icon={UserCheck} color={colPct(t.idoneidad, 95)} sub={`${t.idoneos}/${t.activos} con contrato+examen+ARL`} />
               <KPI label="Formación aprobada" valor={f.aprobadas} unidad="%" Icon={GraduationCap} color={colPct(f.aprobadas, 90)} sub={`${f.intentos} evaluaciones`} />
               <KPI label="Cobertura de formación" valor={f.coberturaFormacion} unidad="%" Icon={GraduationCap} color={colPct(f.coberturaFormacion, 80)} sub={`${f.colaboradoresCapacitados} colaboradores`} />

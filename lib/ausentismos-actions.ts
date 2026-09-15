@@ -12,6 +12,7 @@ import {
   esCategoriaMedica,
   tipoEventoDeCategoria,
   etiquetaCategoria,
+  diasActivosEnPeriodo,
   type CategoriaAusentismo,
 } from "@/lib/ausentismo-categorias"
 
@@ -390,7 +391,8 @@ export interface AnalisisAusentismo {
     faltaNoMedica: number // licencia no remunerada (faltó, no es por salud ni planeada)
     planeadas: number // vacaciones, descanso, licencias remuneradas, maternidad, luto
     noProgramados: number // sin turno asignado
-    pctAusentismo: number // incapacidad médica / programados (IND-GH-02)
+    pctAusentismo: number // incapacidad médica / días-persona esperados según headcount (IND-GH-02)
+    pctCapacidadRespuesta: number // incapacidad médica / turnos programados (control diario) -- indicador operativo aparte, no se elimina
   }
   porCodigo: { codigo: string; turnos: number; esIncapacidad: boolean }[]
   reincidentes: { identificacion: string; nombre: string; incapacidades: number; novedades: number }[]
@@ -434,6 +436,17 @@ export async function getAnalisisAusentismoDiario(
     ? rows.filter((r) => !identificacionesAdmin.has(String(r.identificacion || "").trim()))
     : rows
 
+  // Headcount OPERATIVO (no admin) del/los proyecto(s), con fechas de vínculo --
+  // denominador REAL del ausentismo: días que la persona estuvo vinculada
+  // (fechainicio/fecha_retiro) dentro del período, no filas de control diario
+  // (alguien activo sin ninguna fila ese día antes no entraba al denominador).
+  const { data: hcOperativo } = await supabase
+    .from("headcount")
+    .select("identificacion,nombre,fechainicio,fecha_retiro")
+    .in("idempresa", clientes)
+    .not("admin", "is", true)
+  const hcOperativoReal = (hcOperativo ?? []).filter((h: any) => !/prueba/i.test(String(h.nombre || "")))
+
   // La novedad evidencia el tipo: incapacidad (salud) vs falta no médica
   // (licencia no remunerada) vs planeada (vacaciones/descanso/licencias) vs retiro.
   const esIncap = (a: any) => String(a || "").toLowerCase().includes("incapacidad")
@@ -449,6 +462,18 @@ export async function getAnalisisAusentismoDiario(
     if (mes && f.slice(5, 7) !== mes) return false
     return true
   })
+
+  // Período efectivo para el denominador de días-persona (mismo criterio del
+  // resto de indicadores de ausentismo -- sin año/mes = "todo el histórico",
+  // acotado desde 2026 que es cuando arranca la operación en LIPgo).
+  const desdePer = anio && mes ? `${anio}-${mes}-01` : anio ? `${anio}-01-01` : "2026-01-01"
+  const hastaPer = anio && mes
+    ? new Date(Date.UTC(Number(anio), Number(mes), 0)).toISOString().slice(0, 10)
+    : anio ? `${anio}-12-31` : new Date().toISOString().slice(0, 10)
+  const personalDiasEsperados = hcOperativoReal.reduce(
+    (s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdePer, hastaPer),
+    0,
+  )
 
   let programados = 0, presentes = 0, incapacidadTurnos = 0, faltaNoMedica = 0, planeadas = 0, noProgramados = 0
   const codigos: Record<string, { turnos: number; inc: boolean }> = {}
@@ -484,7 +509,8 @@ export async function getAnalisisAusentismoDiario(
   return {
     resumen: {
       programados, presentes, incapacidadTurnos, faltaNoMedica, planeadas, noProgramados,
-      pctAusentismo: programados > 0 ? Math.round((incapacidadTurnos / programados) * 1000) / 10 : 0,
+      pctAusentismo: personalDiasEsperados > 0 ? Math.round((incapacidadTurnos / personalDiasEsperados) * 1000) / 10 : 0,
+      pctCapacidadRespuesta: programados > 0 ? Math.round((incapacidadTurnos / programados) * 1000) / 10 : 0,
     },
     porCodigo: Object.entries(codigos).map(([codigo, v]) => ({ codigo, turnos: v.turnos, esIncapacidad: v.inc })).sort((a, b) => b.turnos - a.turnos),
     reincidentes: Object.entries(personas).map(([identificacion, v]) => ({ identificacion, nombre: v.nombre, incapacidades: v.inc, novedades: v.nov }))

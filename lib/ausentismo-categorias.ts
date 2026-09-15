@@ -49,3 +49,25 @@ export const CATEGORIA_LABEL: Record<string, string> = {
 export function etiquetaCategoria(cat: string | null | undefined): string {
   return (cat && CATEGORIA_LABEL[cat]) || "Ausentismo"
 }
+
+// Denominador REAL del ausentismo: días que una persona estuvo vinculada
+// (headcount.fechainicio/fecha_retiro) dentro de un período [desde,hasta],
+// no el conteo de filas que alcanzó a tener en registroasistencia ese
+// período (alguien puede estar activo sin ninguna fila registrada). Usa las
+// fechas de vínculo para que el resultado sea correcto también para
+// períodos históricos (headcount cambia con altas/bajas en el tiempo).
+export function diasActivosEnPeriodo(
+  fechainicio: string | null | undefined,
+  fechaRetiro: string | null | undefined,
+  desde: string,
+  hasta: string,
+): number {
+  const DAY_MS = 86_400_000
+  const clamp = (s: string) => new Date(`${String(s).slice(0, 10)}T00:00:00`).getTime()
+  const iniPeriodo = clamp(desde)
+  const finPeriodo = clamp(hasta)
+  const ini = Math.max(iniPeriodo, fechainicio ? clamp(fechainicio) : iniPeriodo)
+  const fin = Math.min(finPeriodo, fechaRetiro ? clamp(fechaRetiro) : finPeriodo)
+  if (fin < ini) return 0
+  return Math.round((fin - ini) / DAY_MS) + 1
+}

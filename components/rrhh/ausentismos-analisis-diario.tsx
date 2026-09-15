@@ -66,6 +66,7 @@ export function AusentismosAnalisisDiario() {
   if (!data) return null
   const r = data.resumen
   const colAus = r.pctAusentismo <= 3 ? SST_TOKENS.ok : r.pctAusentismo <= 5 ? SST_TOKENS.warn : SST_TOKENS.bad
+  const colCap = r.pctCapacidadRespuesta <= 3 ? SST_TOKENS.ok : r.pctCapacidadRespuesta <= 5 ? SST_TOKENS.warn : SST_TOKENS.bad
 
   // Tarjeta tocable (drill-down).
   const Toca = ({ tipo, label, children }: { tipo?: string; label?: string; children: React.ReactNode }) =>
@@ -100,7 +101,10 @@ export function AusentismosAnalisisDiario() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Toca tipo="incapacidad" label="Ausentismo médico (incapacidad)">
-          <SigKpi label="Ausentismo médico" value={`${r.pctAusentismo}%`} Icon={HeartPulse} accent={colAus} valueColor={colAus} sub={`${fmt(r.incapacidadTurnos)} turnos · meta ≤3%`} />
+          <SigKpi label="Ausentismo médico" value={`${r.pctAusentismo}%`} Icon={HeartPulse} accent={colAus} valueColor={colAus} sub={`${fmt(r.incapacidadTurnos)} incapacidades vs headcount del período`} />
+        </Toca>
+        <Toca tipo="incapacidad" label="Ausentismo médico (incapacidad)">
+          <SigKpi label="Capacidad de respuesta" value={`${r.pctCapacidadRespuesta}%`} Icon={Activity} accent={colCap} valueColor={colCap} sub="incapacidad / turnos programados (control diario)" />
         </Toca>
         <SigKpi label="Turnos programados" value={fmt(r.programados)} Icon={Activity} accent={SST_TOKENS.navy} sub={`${fmt(r.presentes)} presentes`} />
         <Toca tipo="incapacidad" label="Incapacidad (salud)">
@@ -176,7 +180,7 @@ export function AusentismosAnalisisDiario() {
 
       <div className="flex items-start gap-2 rounded-lg border p-3 text-xs text-muted-foreground" style={{ borderColor: `${SST_TOKENS.navy}1f` }}>
         <CalendarOff className="mt-0.5 h-4 w-4 shrink-0" style={{ color: SST_TOKENS.navy }} />
-        <span><b>Lectura para auditoría:</b> el ausentismo médico ({r.pctAusentismo}%) mide solo incapacidades sobre turnos programados. Las faltas <b>no programadas</b> ({fmt(r.noProgramados)}) no son ausentismo (no había turno). La caída de turnos programados mes a mes refleja el ajuste de planta por volumen.</span>
+        <span><b>Lectura para auditoría:</b> el ausentismo médico ({r.pctAusentismo}%) mide solo incapacidades sobre el headcount realmente vinculado en el período (fechas de ingreso/retiro), no sobre filas del control diario. La <b>capacidad de respuesta</b> ({r.pctCapacidadRespuesta}%) es un indicador aparte: incapacidad sobre turnos programados, mide qué tanto respondió el personal ya programado. Las faltas <b>no programadas</b> ({fmt(r.noProgramados)}) no son ausentismo (no había turno). La caída de turnos programados mes a mes refleja el ajuste de planta por volumen.</span>
       </div>
 
       {/* Drill-down: detalle del evento de la tarjeta tocada */}

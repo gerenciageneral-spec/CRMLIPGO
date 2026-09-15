@@ -368,6 +368,11 @@ export function PanelOperacionLIP() {
                   </table>
                 </Card>
               </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                "Ausentismo médico" mide ausencias reales vs el headcount vinculado en el periodo (no cuenta en meta si no hay personal en headcount).
+                Capacidad de respuesta del equipo (programado vs real del control diario, informativo, no forma parte del cumplimiento global):{" "}
+                <strong>{p.capacidadRespuesta ?? 0}%</strong>.
+              </p>
             </div>
           )}
 

@@ -56,7 +56,7 @@ import { getMetaDiaForEmpresa } from "@/lib/empresa-meta-dia"
 import { getSlaCargueMin, esNombreSubproducto, PLANTA_ACORDADA, factorTiempoSitio } from "@/lib/sla-acordados"
 import { esCodigoTrasladoNetoCero, nombreMovimientoPorCodigo } from "@/lib/transacciones-codigo"
 import { excluirNoFacturable } from "@/lib/facturas-exclusiones"
-import { categoriaDeNovedad } from "@/lib/ausentismo-categorias"
+import { categoriaDeNovedad, diasActivosEnPeriodo } from "@/lib/ausentismo-categorias"
 
 // Mapea el estado del Centro de Evidencia ISO 9001 al estado de la matriz SIG.
 function isoEstadoASig(e: EstadoISO): SigEstadoCobertura {
@@ -2092,17 +2092,26 @@ async function _computeIndicadoresValores(
     for (const id of clientes) plantaAcordada += PLANTA_ACORDADA[id]?.total || 0
     const ghCobertura = plantaAcordada > 0 ? Math.round((activos / plantaAcordada) * 1000) / 10 : 0
 
-    // --- Ausentismo (registroasistencia): control diario por proyecto ---
-    // Ausentismo = turnos con incapacidad o licencia no remunerada / turnos
-    // programados. Excluye vacaciones, descansos, licencias remuneradas y
-    // retiros -- misma regla de negocio ya definida en
-    // lib/ausentismo-categorias.ts (la fuente única, la usa también el
-    // módulo Ausentismos/Recobro). Cuentas de prueba ("PRUEBA" en el
-    // nombre, activas en headcount para pruebas manuales) se excluyen.
+    // --- Ausentismo (registroasistencia + headcount): control diario por proyecto ---
+    // Ausentismo REAL = ausencias (incapacidad o licencia no remunerada,
+    // misma regla de lib/ausentismo-categorias.ts) / días-persona ESPERADOS
+    // según headcount (fechainicio/fecha_retiro cruzados con el período) --
+    // no el conteo de filas que alcanzaron a tener en registroasistencia
+    // ese período (alguien activo sin ninguna fila ese día no entraba antes
+    // ni al numerador ni al denominador). En paralelo se conserva
+    // "capacidad de respuesta" (programado vs real del control diario):
+    // mide qué tanto el personal PROGRAMADO ese día realmente respondió --
+    // un indicador operativo distinto del ausentismo real, no se elimina.
+    // Administrativos (headcount.admin) y cuentas de prueba ("PRUEBA" en el
+    // nombre) se excluyen de ambos -- no son de interés para medición.
     const asisRows: any[] = []
     let aFrom = 0
     while (true) {
-      let qa = supabase.from("registroasistencia").select("fecha,puesto,asistencia,nombre").in("idempresa", clientes).range(aFrom, aFrom + 999)
+      let qa = supabase
+        .from("registroasistencia")
+        .select("fecha,puesto,asistencia,nombre,identificacion")
+        .in("idempresa", clientes)
+        .range(aFrom, aFrom + 999)
       if (desde) qa = qa.gte("fecha", desde)
       if (hasta) qa = qa.lte("fecha", hasta)
       const { data } = await qa
@@ -2111,10 +2120,29 @@ async function _computeIndicadoresValores(
       aFrom += 1000
       if (aFrom > 120000) break
     }
-    const asisRowsReales = asisRows.filter((r) => !/prueba/i.test(String(r.nombre || "")))
+    const { data: hcAusRows } = await supabase
+      .from("headcount")
+      .select("identificacion,nombre,admin,fechainicio,fecha_retiro,idempresa")
+      .or(clientes.map((c) => `idempresa.eq.${c}`).concat("idempresa.is.null").join(","))
+    const hcAusReales = (hcAusRows ?? []).filter((h: any) => !/prueba/i.test(String(h.nombre || "")))
+    const identificacionesAdminGH = new Set(
+      hcAusReales.filter((h: any) => h.admin === true).map((h: any) => String(h.identificacion || "").trim()),
+    )
+    const asisRowsReales = asisRows.filter(
+      (r) => !/prueba/i.test(String(r.nombre || "")) && !identificacionesAdminGH.has(String(r.identificacion || "").trim()),
+    )
     const turnosProgramados = asisRowsReales.filter((r) => r.puesto !== null || r.asistencia !== null).length
     const turnosAusencia = asisRowsReales.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
-    const ghAusentismo = turnosProgramados > 0 ? Math.round((turnosAusencia / turnosProgramados) * 1000) / 10 : 0
+    const ghCapacidadRespuesta = turnosProgramados > 0 ? Math.round((turnosAusencia / turnosProgramados) * 1000) / 10 : 0
+    // Período efectivo del denominador de días-persona: si no viene desde/hasta
+    // (vista "todo el histórico"), se acota desde 2026 -- cuando arranca la
+    // operación en LIPgo (headcount/registroasistencia no tienen datos antes).
+    const desdeGH = desde || "2026-01-01"
+    const hastaGH = hasta || new Date().toISOString().slice(0, 10)
+    const personalDiasEsperados = hcAusReales
+      .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
+      .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdeGH, hastaGH), 0)
+    const ghAusentismo = personalDiasEsperados > 0 ? Math.round((turnosAusencia / personalDiasEsperados) * 1000) / 10 : 0
 
     // --- Recobro de incapacidades (ausentismosst): % de recuperación ---
     // Recobrable = costos_eps (EG día 3+) + costos_arl (AT 100%); recuperado =
@@ -2366,7 +2394,8 @@ async function _computeIndicadoresValores(
       desp_meta_ton: { valor: cumplimientoMetaTon, base: `${Math.round(toneladas)}/${Math.round(metaPeriodo)} ton` },
       sla_tiempos: { valor: slaTiempos, base: `${slaOk}/${slaTot} dentro de SLA` },
       gh_cobertura: { valor: ghCobertura, base: plantaAcordada > 0 ? `${activos}/${plantaAcordada} planta` : "planta no definida" },
-      gh_ausentismo: { valor: ghAusentismo, base: turnosProgramados > 0 ? `${turnosAusencia}/${turnosProgramados} turnos` : "sin registros" },
+      gh_ausentismo: { valor: ghAusentismo, base: personalDiasEsperados > 0 ? `${turnosAusencia}/${personalDiasEsperados} días-persona` : "sin headcount en el período" },
+      gh_capacidad_respuesta: { valor: ghCapacidadRespuesta, base: turnosProgramados > 0 ? `${turnosAusencia}/${turnosProgramados} turnos` : "sin registros" },
       gh_recobro: { valor: ghRecobro, base: recobrableTot > 0 ? `$${recuperadoTot.toLocaleString("es-CO")} de $${recobrableTot.toLocaleString("es-CO")}` : "sin recobros" },
       sla_global: { valor: slaGlobal, base: "promedio de servicio" },
       lip_facturacion: { valor: lipFacturacion, base: `${factTot - factPend}/${factTot} gestionadas` },
@@ -4292,12 +4321,31 @@ export async function getPanelGestionHumanaLIP(
       aFrom += 1000
       if (aFrom > 120000) break
     }
+    // Ausentismo REAL (headcount): admin excluido + denominador por días
+    // vinculados (fechainicio/fecha_retiro), misma regla de sig-actions
+    // getIndicadoresValores. El cálculo "programado vs real" (registroasistencia)
+    // se conserva aparte como "capacidad de respuesta" -- indicador operativo
+    // distinto, no se elimina.
+    const { data: hcAusHc } = await supabase
+      .from("headcount")
+      .select("identificacion,nombre,admin,fechainicio,fecha_retiro,idempresa")
+      .or(clientes.map((c) => `idempresa.eq.${c}`).concat("idempresa.is.null").join(","))
+    const hcAusReales = (hcAusHc ?? []).filter((h: any) => !/prueba/i.test(String(h.nombre || "")))
+    const identificacionesAdminGH = new Set(
+      hcAusReales.filter((h: any) => h.admin === true).map((h: any) => String(h.identificacion || "").trim()),
+    )
+
     // Filtro de período en memoria (cubre mes/día aunque no haya rango de consulta).
-    // Excluye cuentas de prueba ("PRUEBA" en el nombre, activas en headcount
-    // para pruebas manuales). Ausentismo = incapacidad (EG/AT) + licencia no
-    // remunerada -- lib/ausentismo-categorias.ts, la misma regla del módulo
-    // Ausentismos/Recobro (antes esta vista solo contaba "incapacidad").
-    const asisRows = asisAll.filter((r) => enPeriodo(r.fecha) && !/prueba/i.test(String(r.nombre || "")))
+    // Excluye administrativos y cuentas de prueba ("PRUEBA" en el nombre, activas
+    // en headcount para pruebas manuales). Ausentismo = incapacidad (EG/AT) +
+    // licencia no remunerada -- lib/ausentismo-categorias.ts, la misma regla del
+    // módulo Ausentismos/Recobro (antes esta vista solo contaba "incapacidad").
+    const asisRows = asisAll.filter(
+      (r) =>
+        enPeriodo(r.fecha) &&
+        !/prueba/i.test(String(r.nombre || "")) &&
+        !identificacionesAdminGH.has(String(r.identificacion || "").trim()),
+    )
     const asisProgramados = asisRows.filter((r) => r.puesto !== null || r.asistencia !== null).length
     const asisPresentes = asisRows.filter((r) => r.asistencia === null && r.puesto !== null).length
     const asisAusencias = asisRows.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
@@ -4305,6 +4353,12 @@ export async function getPanelGestionHumanaLIP(
     // no solo salidas definitivas). Se reporta como conteo, no como % de rotación.
     const retiros = new Set(asisRows.filter((r) => String(r.asistencia || "").toLowerCase().includes("retiro")).map((r) => r.identificacion)).size
     const asisTotal = asisProgramados
+    // Días-persona esperados (denominador real del ausentismo).
+    const rDesdeGH = rDesde || "2026-01-01"
+    const rHastaGH = rHasta || new Date().toISOString().slice(0, 10)
+    const personalDiasEsperados = hcAusReales
+      .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
+      .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, rDesdeGH, rHastaGH), 0)
     // Planta acordada (base de cobertura).
     let plantaGH = 0
     for (const id of clientes) plantaGH += PLANTA_ACORDADA[id]?.total || 0
@@ -4349,8 +4403,12 @@ export async function getPanelGestionHumanaLIP(
           cobertura: plantaGH > 0 ? pct(activos.length, plantaGH) : 0,
           // Retiros = personas distintas con novedad "Retiro" en el periodo (conteo).
           retiros,
-          // Ausentismo real desde el control diario de asistencia (todos los proyectos).
-          ausentismo: pct(asisAusencias, asisProgramados),
+          // Ausentismo REAL = ausencias / días-persona esperados según headcount
+          // (fechainicio/fecha_retiro cruzados con el período), no filas de
+          // registroasistencia. "Capacidad de respuesta" (programado vs real del
+          // control diario) queda aparte, es un indicador operativo distinto.
+          ausentismo: pct(asisAusencias, personalDiasEsperados),
+          capacidadRespuesta: pct(asisAusencias, asisProgramados),
           ausencias: asisAusencias,
           idoneidad: pct(idoneos, activos.length),
           idoneos,
@@ -4712,14 +4770,49 @@ export async function getPanelOperacionLIP(
     for (const id of clientes) plantaAcordada += PLANTA_ACORDADA[id]?.total || 0
     const coberturaPlanta = plantaAcordada > 0 ? pct(activos, plantaAcordada) : 0
 
-    // Ausentismo del equipo (incapacidad EG/AT + licencia no remunerada) /
-    // turnos del periodo -- mismas 2 categorías que lib/ausentismo-categorias.ts
-    // (categoriaDeNovedad), la fuente única de verdad ya usada por el módulo
-    // Ausentismos/Recobro. Si esa regla cambia, este `.or()` debe seguirla.
-    const ausIncap = await asisCount((qq: any) =>
-      qq.or("asistencia.ilike.%incapacidad%,asistencia.ilike.%no remunerada%"),
+    // Ausentismo REAL del equipo: incapacidad EG/AT + licencia no remunerada
+    // (lib/ausentismo-categorias.ts, fuente única) / días-persona ESPERADOS
+    // según headcount (fechainicio/fecha_retiro cruzados con el período) --
+    // no un conteo de filas de registroasistencia. "Capacidad de respuesta"
+    // (programado vs real del control diario) se conserva aparte, es un
+    // indicador operativo distinto. Administrativos excluidos de ambos.
+    const asisAusRows: any[] = []
+    {
+      let aFrom2 = 0
+      while (true) {
+        let qa = supabase
+          .from("registroasistencia")
+          .select("puesto,asistencia,identificacion,nombre")
+          .in("idempresa", clientes)
+          .not("nombre", "ilike", "%prueba%")
+          .range(aFrom2, aFrom2 + 999)
+        if (desde) qa = qa.gte("fecha", desde)
+        if (hasta) qa = qa.lte("fecha", hasta)
+        const { data } = await qa
+        asisAusRows.push(...(data ?? []))
+        if (!data || data.length < 1000) break
+        aFrom2 += 1000
+        if (aFrom2 > 120000) break
+      }
+    }
+    const { data: hcAusHcOp } = await supabase
+      .from("headcount")
+      .select("identificacion,nombre,admin,fechainicio,fecha_retiro,idempresa")
+      .or(clientes.map((c) => `idempresa.eq.${c}`).concat("idempresa.is.null").join(","))
+    const hcAusRealesOp = (hcAusHcOp ?? []).filter((h: any) => !/prueba/i.test(String(h.nombre || "")))
+    const identificacionesAdminOp = new Set(
+      hcAusRealesOp.filter((h: any) => h.admin === true).map((h: any) => String(h.identificacion || "").trim()),
     )
-    const ausentismo = pct(ausIncap, asisTotal)
+    const asisAusRealesOp = asisAusRows.filter((r) => !identificacionesAdminOp.has(String(r.identificacion || "").trim()))
+    const turnosProgramadosOp = asisAusRealesOp.filter((r) => r.puesto !== null || r.asistencia !== null).length
+    const ausIncap = asisAusRealesOp.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
+    const capacidadRespuesta = pct(ausIncap, turnosProgramadosOp)
+    const desdeGHOp = desde || "2026-01-01"
+    const hastaGHOp = hasta || new Date().toISOString().slice(0, 10)
+    const personalDiasEsperadosOp = hcAusRealesOp
+      .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
+      .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdeGHOp, hastaGHOp), 0)
+    const ausentismo = pct(ausIncap, personalDiasEsperadosOp)
 
     // --- Facturación PENDIENTE POR SOLICITAR (responsabilidad del coordinador) ---
     // Solo las órdenes que el coordinador AÚN NO solicitó facturar (estadofactura
@@ -4814,6 +4907,7 @@ export async function getPanelOperacionLIP(
           coberturaPlanta,
           plantaAcordada,
           ausentismo,
+          capacidadRespuesta,
         },
         valorAgregado: {
           pdfOrden: pct(pdfO, tot),
