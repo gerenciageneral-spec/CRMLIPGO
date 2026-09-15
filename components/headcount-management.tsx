@@ -686,7 +686,7 @@ export default function HeadcountManagement() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedPerson ? "Editar Persona" : "Nueva Persona"}</DialogTitle>
             <DialogDescription>Complete la información básica de la persona</DialogDescription>
