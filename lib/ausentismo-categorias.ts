@@ -56,6 +56,24 @@ export function etiquetaCategoria(cat: string | null | undefined): string {
 // período (alguien puede estar activo sin ninguna fila registrada). Usa las
 // fechas de vínculo para que el resultado sea correcto también para
 // períodos históricos (headcount cambia con altas/bajas en el tiempo).
+// Cuenta AUSENCIAS por (persona, día) distinto, no filas crudas. Una misma
+// persona puede tener 2 filas el mismo día (ej. Auxiliar Mixto turno 1+2,
+// ver registroasistencia.turno) -- si ambas comparten la misma novedad de
+// ausencia, contar filas duplicaría esa ausencia. El denominador del
+// ausentismo (diasActivosEnPeriodo) SIEMPRE cuenta días de calendario, así
+// que el numerador debe contar en la misma unidad para que el % nunca
+// pueda superar el 100%.
+export function diasAusenciaDistintos<T extends { identificacion?: string | null; fecha?: string | null; asistencia?: string | null }>(
+  rows: T[],
+): number {
+  const dias = new Set<string>()
+  for (const r of rows) {
+    if (!categoriaDeNovedad(r.asistencia)) continue
+    dias.add(`${String(r.identificacion || "").trim()}|${String(r.fecha || "")}`)
+  }
+  return dias.size
+}
+
 export function diasActivosEnPeriodo(
   fechainicio: string | null | undefined,
   fechaRetiro: string | null | undefined,

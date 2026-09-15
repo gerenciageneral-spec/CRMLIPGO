@@ -464,12 +464,15 @@ export async function getAnalisisAusentismoDiario(
   })
 
   // Período efectivo para el denominador de días-persona (mismo criterio del
-  // resto de indicadores de ausentismo -- sin año/mes = "todo el histórico",
-  // acotado desde 2026 que es cuando arranca la operación en LIPgo).
-  const desdePer = anio && mes ? `${anio}-${mes}-01` : anio ? `${anio}-01-01` : "2026-01-01"
-  const hastaPer = anio && mes
-    ? new Date(Date.UTC(Number(anio), Number(mes), 0)).toISOString().slice(0, 10)
-    : anio ? `${anio}-12-31` : new Date().toISOString().slice(0, 10)
+  // resto de indicadores de ausentismo). Si no se eligió año (vista "Todos",
+  // estado inicial) y sí mes, se asume el año en curso -- si no, el mes
+  // seleccionado se ignoraba para el denominador (quedaba en "todo el
+  // histórico") aunque `filtradas` sí acotaba el numerador a ese mes.
+  const anioPer = anio || (mes ? "2026" : "")
+  const desdePer = anioPer && mes ? `${anioPer}-${mes}-01` : anioPer ? `${anioPer}-01-01` : "2026-01-01"
+  const hastaPer = anioPer && mes
+    ? new Date(Date.UTC(Number(anioPer), Number(mes), 0)).toISOString().slice(0, 10)
+    : anioPer ? `${anioPer}-12-31` : new Date().toISOString().slice(0, 10)
   const personalDiasEsperados = hcOperativoReal.reduce(
     (s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdePer, hastaPer),
     0,
@@ -480,6 +483,12 @@ export async function getAnalisisAusentismoDiario(
   const personas: Record<string, { nombre: string; inc: number; nov: number }> = {}
   const meses: Record<string, { inc: number; nov: number; prog: number }> = {}
   const eventos: { fecha: string; nombre: string; identificacion: string; codigo: string; tipo: string }[] = []
+  // Días distintos (identificacion+fecha) con incapacidad -- numerador del
+  // ausentismo REAL, misma unidad que el denominador (días-persona). Una
+  // persona con 2 filas el mismo día (ej. Auxiliar Mixto turno 1+2) no debe
+  // contar la ausencia dos veces. `incapacidadTurnos` (filas) se conserva
+  // igual para el detalle/drill-down y para pctCapacidadRespuesta.
+  const diasIncapacidadSet = new Set<string>()
 
   for (const r of filtradas) {
     const tieneNovedad = r.asistencia !== null && r.asistencia !== ""
@@ -492,7 +501,7 @@ export async function getAnalisisAusentismoDiario(
     if (tieneNovedad) {
       const cod = String(r.asistencia)
       const inc = esIncap(cod)
-      if (inc) incapacidadTurnos++
+      if (inc) { incapacidadTurnos++; diasIncapacidadSet.add(`${String(r.identificacion || "").trim()}|${String(r.fecha || "")}`) }
       else if (esFaltaNoMedica(cod)) faltaNoMedica++
       else if (!esRetiro(cod)) planeadas++ // vacaciones/descanso/licencias; retiro = baja, no cuenta
       if (!codigos[cod]) codigos[cod] = { turnos: 0, inc }
@@ -509,7 +518,7 @@ export async function getAnalisisAusentismoDiario(
   return {
     resumen: {
       programados, presentes, incapacidadTurnos, faltaNoMedica, planeadas, noProgramados,
-      pctAusentismo: personalDiasEsperados > 0 ? Math.round((incapacidadTurnos / personalDiasEsperados) * 1000) / 10 : 0,
+      pctAusentismo: personalDiasEsperados > 0 ? Math.round((diasIncapacidadSet.size / personalDiasEsperados) * 1000) / 10 : 0,
       pctCapacidadRespuesta: programados > 0 ? Math.round((incapacidadTurnos / programados) * 1000) / 10 : 0,
     },
     porCodigo: Object.entries(codigos).map(([codigo, v]) => ({ codigo, turnos: v.turnos, esIncapacidad: v.inc })).sort((a, b) => b.turnos - a.turnos),

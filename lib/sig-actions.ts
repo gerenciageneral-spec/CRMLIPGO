@@ -56,7 +56,7 @@ import { getMetaDiaForEmpresa } from "@/lib/empresa-meta-dia"
 import { getSlaCargueMin, esNombreSubproducto, PLANTA_ACORDADA, factorTiempoSitio } from "@/lib/sla-acordados"
 import { esCodigoTrasladoNetoCero, nombreMovimientoPorCodigo } from "@/lib/transacciones-codigo"
 import { excluirNoFacturable } from "@/lib/facturas-exclusiones"
-import { categoriaDeNovedad, diasActivosEnPeriodo } from "@/lib/ausentismo-categorias"
+import { categoriaDeNovedad, diasActivosEnPeriodo, diasAusenciaDistintos } from "@/lib/ausentismo-categorias"
 
 // Mapea el estado del Centro de Evidencia ISO 9001 al estado de la matriz SIG.
 function isoEstadoASig(e: EstadoISO): SigEstadoCobertura {
@@ -2138,7 +2138,12 @@ async function _computeIndicadoresValores(
       (r) => !/prueba/i.test(String(r.nombre || "")) && !identificacionesAdminGH.has(String(r.identificacion || "").trim()),
     )
     const turnosProgramados = asisRowsReales.filter((r) => r.puesto !== null || r.asistencia !== null).length
+    // Turnos (filas) para "capacidad de respuesta"; días-persona distintos
+    // para el ausentismo real (misma unidad que el denominador -- ver
+    // diasAusenciaDistintos, evita que una persona con 2 filas el mismo día
+    // -- ej. Auxiliar Mixto turno 1+2 -- cuente la ausencia dos veces).
     const turnosAusencia = asisRowsReales.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
+    const diasAusencia = diasAusenciaDistintos(asisRowsReales)
     const ghCapacidadRespuesta = turnosProgramados > 0 ? Math.round((turnosAusencia / turnosProgramados) * 1000) / 10 : 0
     // Período efectivo del denominador de días-persona: si no viene desde/hasta
     // (vista "todo el histórico"), se acota desde 2026 -- cuando arranca la
@@ -2148,7 +2153,7 @@ async function _computeIndicadoresValores(
     const personalDiasEsperados = hcAusReales
       .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
       .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdeGH, hastaGH), 0)
-    const ghAusentismo = personalDiasEsperados > 0 ? Math.round((turnosAusencia / personalDiasEsperados) * 1000) / 10 : 0
+    const ghAusentismo = personalDiasEsperados > 0 ? Math.round((diasAusencia / personalDiasEsperados) * 1000) / 10 : 0
 
     // --- Recobro de incapacidades (ausentismosst): % de recuperación ---
     // Recobrable = costos_eps (EG día 3+) + costos_arl (AT 100%); recuperado =
@@ -2400,7 +2405,7 @@ async function _computeIndicadoresValores(
       desp_meta_ton: { valor: cumplimientoMetaTon, base: `${Math.round(toneladas)}/${Math.round(metaPeriodo)} ton` },
       sla_tiempos: { valor: slaTiempos, base: `${slaOk}/${slaTot} dentro de SLA` },
       gh_cobertura: { valor: ghCobertura, base: plantaAcordada > 0 ? `${activos}/${plantaAcordada} planta` : "planta no definida" },
-      gh_ausentismo: { valor: ghAusentismo, base: personalDiasEsperados > 0 ? `${turnosAusencia}/${personalDiasEsperados} días-persona` : "sin headcount en el período" },
+      gh_ausentismo: { valor: ghAusentismo, base: personalDiasEsperados > 0 ? `${diasAusencia}/${personalDiasEsperados} días-persona` : "sin headcount en el período" },
       gh_capacidad_respuesta: { valor: ghCapacidadRespuesta, base: turnosProgramados > 0 ? `${turnosAusencia}/${turnosProgramados} turnos` : "sin registros" },
       gh_recobro: { valor: ghRecobro, base: recobrableTot > 0 ? `$${recuperadoTot.toLocaleString("es-CO")} de $${recobrableTot.toLocaleString("es-CO")}` : "sin recobros" },
       sla_global: { valor: slaGlobal, base: "promedio de servicio" },
@@ -4310,10 +4315,17 @@ export async function getPanelGestionHumanaLIP(
     // Cubre los 4 proyectos. De aquí salen jornada, ausentismo y retiros.
     // Rango de fechas según año/mes/día (para acotar la consulta). Con año fijo:
     // mes+día = un día; solo mes = todo el mes; solo año = todo el año.
+    // BUG CRÍTICO corregido (2026-09-15): `${anio}-${mes}-31` como límite fijo
+    // rompía CUALQUIER mes de 30 días (abril/junio/septiembre/noviembre) --
+    // `fecha` es columna `date` real en Postgres, "2026-09-31" no es una fecha
+    // válida y el `.lte()` fallaba con error 22008 (out of range), la consulta
+    // devolvía null y el panel quedaba en blanco para todo ese mes. Se usa el
+    // último día REAL del mes (día 0 del mes siguiente).
+    const ultimoDiaDe = (a: string, m: string) => new Date(Number(a), Number(m), 0).getDate()
     let rDesde: string | null = null, rHasta: string | null = null
     if (anio) {
       if (mes && dia) { rDesde = `${anio}-${mes}-${dia}`; rHasta = `${anio}-${mes}-${dia}` }
-      else if (mes) { rDesde = `${anio}-${mes}-01`; rHasta = `${anio}-${mes}-31` }
+      else if (mes) { rDesde = `${anio}-${mes}-01`; rHasta = `${anio}-${mes}-${String(ultimoDiaDe(anio, mes)).padStart(2, "0")}` }
       else { rDesde = `${anio}-01-01`; rHasta = `${anio}-12-31` }
     }
     const asisAll: any[] = []
@@ -4354,14 +4366,32 @@ export async function getPanelGestionHumanaLIP(
     )
     const asisProgramados = asisRows.filter((r) => r.puesto !== null || r.asistencia !== null).length
     const asisPresentes = asisRows.filter((r) => r.asistencia === null && r.puesto !== null).length
-    const asisAusencias = asisRows.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
+    // Turnos (filas) para "capacidad de respuesta" -- conserva la fórmula
+    // original tal cual. Días-persona distintos para el ausentismo real
+    // (numerador y denominador en la misma unidad -- ver diasAusenciaDistintos).
+    const asisAusenciasTurnos = asisRows.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
+    const asisAusenciasDias = diasAusenciaDistintos(asisRows)
     // Retiros = PERSONAS distintas con novedad "Retiro" (incluye apoyo de picos,
     // no solo salidas definitivas). Se reporta como conteo, no como % de rotación.
     const retiros = new Set(asisRows.filter((r) => String(r.asistencia || "").toLowerCase().includes("retiro")).map((r) => r.identificacion)).size
     const asisTotal = asisProgramados
-    // Días-persona esperados (denominador real del ausentismo).
-    const rDesdeGH = rDesde || "2026-01-01"
-    const rHastaGH = rHasta || new Date().toISOString().slice(0, 10)
+    // Días-persona esperados (denominador real del ausentismo). Mismo
+    // criterio de rango que rDesde/rHasta arriba, PERO si no se eligió año
+    // (vista "Todos" del filtro, el estado inicial) y sí mes/día, se asume
+    // el año en curso -- si no, rDesde/rHasta quedan null (ver el `if(anio)`
+    // de arriba) y el denominador se diluía con TODO el histórico aunque el
+    // usuario solo pidió ver un mes puntual (numerador sí quedaba acotado al
+    // mes vía `enPeriodo`, denominador no -- ausentismo salía artificialmente bajo).
+    const anioGH = anio || (mes || dia ? "2026" : "")
+    let rDesdeGH: string, rHastaGH: string
+    if (anioGH) {
+      if (mes && dia) { rDesdeGH = `${anioGH}-${mes}-${dia}`; rHastaGH = `${anioGH}-${mes}-${dia}` }
+      else if (mes) { rDesdeGH = `${anioGH}-${mes}-01`; rHastaGH = `${anioGH}-${mes}-${String(ultimoDiaDe(anioGH, mes)).padStart(2, "0")}` }
+      else { rDesdeGH = `${anioGH}-01-01`; rHastaGH = `${anioGH}-12-31` }
+    } else {
+      rDesdeGH = "2026-01-01"
+      rHastaGH = new Date().toISOString().slice(0, 10)
+    }
     const personalDiasEsperados = hcAusReales
       .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
       .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, rDesdeGH, rHastaGH), 0)
@@ -4413,9 +4443,9 @@ export async function getPanelGestionHumanaLIP(
           // (fechainicio/fecha_retiro cruzados con el período), no filas de
           // registroasistencia. "Capacidad de respuesta" (programado vs real del
           // control diario) queda aparte, es un indicador operativo distinto.
-          ausentismo: pct(asisAusencias, personalDiasEsperados),
-          capacidadRespuesta: pct(asisAusencias, asisProgramados),
-          ausencias: asisAusencias,
+          ausentismo: pct(asisAusenciasDias, personalDiasEsperados),
+          capacidadRespuesta: pct(asisAusenciasTurnos, asisProgramados),
+          ausencias: asisAusenciasTurnos,
           idoneidad: pct(idoneos, activos.length),
           idoneos,
         },
@@ -4804,7 +4834,7 @@ export async function getPanelOperacionLIP(
       while (true) {
         let qa = supabase
           .from("registroasistencia")
-          .select("puesto,asistencia,identificacion,nombre")
+          .select("fecha,puesto,asistencia,identificacion,nombre")
           .in("idempresa", clientes)
           .not("nombre", "ilike", "%prueba%")
           .range(aFrom2, aFrom2 + 999)
@@ -4827,14 +4857,17 @@ export async function getPanelOperacionLIP(
     )
     const asisAusRealesOp = asisAusRows.filter((r) => !identificacionesAdminOp.has(String(r.identificacion || "").trim()))
     const turnosProgramadosOp = asisAusRealesOp.filter((r) => r.puesto !== null || r.asistencia !== null).length
-    const ausIncap = asisAusRealesOp.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
-    const capacidadRespuesta = pct(ausIncap, turnosProgramadosOp)
+    // Turnos (filas) para "capacidad de respuesta"; días-persona distintos
+    // para el ausentismo real (misma unidad que el denominador).
+    const ausIncapTurnos = asisAusRealesOp.filter((r) => !!categoriaDeNovedad(r.asistencia)).length
+    const ausIncapDias = diasAusenciaDistintos(asisAusRealesOp)
+    const capacidadRespuesta = pct(ausIncapTurnos, turnosProgramadosOp)
     const desdeGHOp = desde || "2026-01-01"
     const hastaGHOp = hasta || new Date().toISOString().slice(0, 10)
     const personalDiasEsperadosOp = hcAusRealesOp
       .filter((h: any) => h.admin !== true && h.idempresa !== null && clientes.includes(Number(h.idempresa)))
       .reduce((s: number, h: any) => s + diasActivosEnPeriodo(h.fechainicio, h.fecha_retiro, desdeGHOp, hastaGHOp), 0)
-    const ausentismo = pct(ausIncap, personalDiasEsperadosOp)
+    const ausentismo = pct(ausIncapDias, personalDiasEsperadosOp)
 
     // --- Facturación PENDIENTE POR SOLICITAR (responsabilidad del coordinador) ---
     // Solo las órdenes que el coordinador AÚN NO solicitó facturar (estadofactura
