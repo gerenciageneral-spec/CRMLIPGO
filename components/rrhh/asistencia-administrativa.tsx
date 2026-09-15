@@ -27,6 +27,7 @@ import {
   getHistorialAsistenciaPersona,
   getEstadoHoyAdministrativos,
   upsertAsistenciaDia,
+  completarQuincenaAdministrativos,
   type PersonaAsistenciaAdmin,
   type FilaHistorialAsistencia,
   type EstadoHoyAdministrativo,
@@ -75,6 +76,7 @@ export default function AsistenciaAdministrativa() {
   const [estadoHoy, setEstadoHoy] = useState<EstadoHoyAdministrativo[]>([])
   const [loadingEstadoHoy, setLoadingEstadoHoy] = useState(true)
   const [marcandoHoy, setMarcandoHoy] = useState<string | null>(null)
+  const [completandoQuincena, setCompletandoQuincena] = useState(false)
 
   const cargarEstadoHoy = () => {
     if (!selectedEmpresaId) return
@@ -119,6 +121,27 @@ export default function AsistenciaAdministrativa() {
     toast({ title: "Marcado", description: `${p.nombre}: día de hoy registrado.` })
     cargarEstadoHoy()
     if (seleccionada?.identificacion === p.identificacion) cargarHistorial(p.identificacion)
+  }
+
+  const completarQuincena = async () => {
+    if (!selectedEmpresaId) return
+    if (!confirm("¿Completar la quincena en curso para TODOS los administrativos activos? Solo se llenan los días que no tengan ningún registro -- nunca se toca un día que ya tenga algo (novedad, turno, lo que sea).")) return
+    setCompletandoQuincena(true)
+    const r = await completarQuincenaAdministrativos(selectedEmpresaId)
+    setCompletandoQuincena(false)
+    if (!r.success) {
+      toast({ title: "Error", description: r.message, variant: "destructive" })
+      return
+    }
+    if (r.diasCompletados === 0) {
+      toast({ title: "Sin novedad", description: "La quincena ya estaba completa para todos los administrativos." })
+    } else {
+      toast({
+        title: "Quincena completada",
+        description: `${r.diasCompletados} día(s) marcado(s) en ${r.personasCompletadas} persona(s) (período ${r.periodo?.desde} a ${r.periodo?.hasta}).`,
+      })
+    }
+    cargarEstadoHoy()
   }
 
   const cargarHistorial = (identificacion: string) => {
@@ -235,17 +258,29 @@ export default function AsistenciaAdministrativa() {
                 estadoHoy.some((p) => !p.tieneHoy) ? "border-amber-300 bg-amber-50" : "border-green-300 bg-green-50"
               }`}
             >
-              <div className="flex items-center gap-2">
-                {estadoHoy.some((p) => !p.tieneHoy) ? (
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                )}
-                <p className="text-sm font-medium">
-                  {estadoHoy.every((p) => p.tieneHoy)
-                    ? `Asistencia de hoy completa (${estadoHoy.length}/${estadoHoy.length} administrativos)`
-                    : `Faltan ${estadoHoy.filter((p) => !p.tieneHoy).length} de ${estadoHoy.length} administrativos por marcar hoy`}
-                </p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {estadoHoy.some((p) => !p.tieneHoy) ? (
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                  <p className="text-sm font-medium">
+                    {estadoHoy.every((p) => p.tieneHoy)
+                      ? `Asistencia de hoy completa (${estadoHoy.length}/${estadoHoy.length} administrativos)`
+                      : `Faltan ${estadoHoy.filter((p) => !p.tieneHoy).length} de ${estadoHoy.length} administrativos por marcar hoy`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={completandoQuincena}
+                  onClick={completarQuincena}
+                  title="Llena, para todos los administrativos activos, los días de la quincena en curso que no tengan ningún registro -- nunca toca un día que ya tenga algo"
+                >
+                  {completandoQuincena && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                  Completar quincena
+                </Button>
               </div>
               {estadoHoy.some((p) => !p.tieneHoy) && (
                 <div className="space-y-1">

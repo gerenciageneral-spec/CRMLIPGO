@@ -372,3 +372,101 @@ export async function upsertAsistenciaDia(
     return { success: false, message: e?.message || "Error al guardar la asistencia." }
   }
 }
+
+function hoyBogota(): string {
+  const b = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }))
+  return `${b.getFullYear()}-${String(b.getMonth() + 1).padStart(2, "0")}-${String(b.getDate()).padStart(2, "0")}`
+}
+
+/** Rango [1-15] o [16-fin de mes] de la fecha dada, recortado a "hoy" si la quincena está en curso. */
+function rangoQuincenaActual(hoy: string): { desde: string; hasta: string } {
+  const [anioStr, mesStr, diaStr] = hoy.split("-")
+  const anio = Number(anioStr)
+  const mes = Number(mesStr)
+  const dia = Number(diaStr)
+  const p = (n: number) => String(n).padStart(2, "0")
+  if (dia <= 15) {
+    return { desde: `${anio}-${p(mes)}-01`, hasta: `${anio}-${p(mes)}-15` }
+  }
+  const ultimoDia = new Date(anio, mes, 0).getDate() // día 0 del mes siguiente = último día de este mes
+  return { desde: `${anio}-${p(mes)}-16`, hasta: `${anio}-${p(mes)}-${p(Math.min(ultimoDia, dia))}` }
+}
+
+export interface ResultadoCompletarQuincena {
+  success: boolean
+  message?: string
+  periodo?: { desde: string; hasta: string }
+  personasCompletadas: number
+  diasCompletados: number
+  detalle: { nombre: string; dias: string[] }[]
+}
+
+/**
+ * Completa, SOLO para el personal ADMINISTRATIVO (headcount.admin=true) del
+ * proyecto, los días de la quincena EN CURSO (1-15 o 16-fin de mes, recortada
+ * a hoy) que NO tengan NINGUNA fila en `registroasistencia` -- los marca
+ * exactamente con el MISMO mecanismo que ya usa esta pantalla para marcar un
+ * día individual como trabajado (`upsertAsistenciaDia`, tipo="TRABAJADO",
+ * esAdministrativo=true -- ver el comentario del bug de 2026-09-09 ahí
+ * mismo: paga el día completo sin disparar recargo dominical/festivo).
+ *
+ * NUNCA toca un día que YA tenga una fila -- se identifican los huecos
+ * primero y solo se llaman uno por uno (nunca con el rango completo, que
+ * SÍ actualizaría filas existentes -- ver upsertAsistenciaDia). Pedido del
+ * usuario 2026-09-14: "marcar toda la quincena a los administrativos con
+ * asistencia todos los días, los días que hagan falta".
+ */
+export async function completarQuincenaAdministrativos(empresaId: number): Promise<ResultadoCompletarQuincena> {
+  if (!empresaId) return { success: false, message: "Falta el proyecto.", personasCompletadas: 0, diasCompletados: 0, detalle: [] }
+  try {
+    const personasR = await getPersonasAsistenciaAdministrativa(empresaId)
+    if (!personasR.success) {
+      return { success: false, message: personasR.message, personasCompletadas: 0, diasCompletados: 0, detalle: [] }
+    }
+    const administrativos = personasR.data.filter((p) => p.admin && String(p.estado || "").toUpperCase() === "ACTIVO")
+    if (administrativos.length === 0) {
+      return { success: true, personasCompletadas: 0, diasCompletados: 0, detalle: [] }
+    }
+
+    const { desde, hasta } = rangoQuincenaActual(hoyBogota())
+    const fechas = listaFechas(desde, hasta)
+
+    const admin: any = await getSupabaseAdmin()
+    const detalle: { nombre: string; dias: string[] }[] = []
+    let diasCompletados = 0
+
+    for (const persona of administrativos) {
+      const { data: existentes } = await admin
+        .from("registroasistencia")
+        .select("fecha")
+        .eq("idempresa", empresaId)
+        .eq("identificacion", persona.identificacion)
+        .in("fecha", fechas)
+      const fechasConRegistro = new Set((existentes || []).map((r: any) => String(r.fecha).slice(0, 10)))
+      const faltantes = fechas.filter((f) => !fechasConRegistro.has(f))
+      if (faltantes.length === 0) continue
+
+      const diasOk: string[] = []
+      for (const fecha of faltantes) {
+        const r = await upsertAsistenciaDia({
+          empresaId,
+          identificacion: persona.identificacion,
+          nombre: persona.nombre,
+          fechaInicio: fecha,
+          fechaFin: fecha,
+          tipo: "TRABAJADO",
+          esAdministrativo: true,
+        })
+        if (r.success) diasOk.push(fecha)
+      }
+      if (diasOk.length > 0) {
+        detalle.push({ nombre: persona.nombre, dias: diasOk })
+        diasCompletados += diasOk.length
+      }
+    }
+
+    return { success: true, periodo: { desde, hasta }, personasCompletadas: detalle.length, diasCompletados, detalle }
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Error al completar la quincena.", personasCompletadas: 0, diasCompletados: 0, detalle: [] }
+  }
+}

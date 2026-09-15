@@ -199,13 +199,26 @@ async function getSubmoduloKpis(
     try {
       const { data } = await sb
         .from("ausentismosst")
-        .select("total_dias_incapacidad, tipo_evento, requiere_revision_sst, dias_incapacidad")
+        .select("cedula, total_dias_incapacidad, tipo_evento, requiere_revision_sst, dias_incapacidad")
         .eq("idempresa", empresaId)
         .gte("fecha_inicial", desde)
         .lte("fecha_inicial", hasta)
       rows = data || []
     } catch {
       rows = []
+    }
+    // Administrativos NUNCA salen en este KPI (usuario 2026-09-14): no son de
+    // interés para medir ausentismo; su asistencia solo alimenta pago/PILA.
+    try {
+      const { data: hcAdmin } = await sb
+        .from("headcount")
+        .select("identificacion")
+        .eq("admin", true)
+        .or(`idempresa.eq.${empresaId},idempresa.is.null`)
+      const cedulasAdmin = new Set((hcAdmin || []).map((h: any) => String(h.identificacion || "").trim()))
+      if (cedulasAdmin.size > 0) rows = rows.filter((r) => !cedulasAdmin.has(String(r.cedula || "").trim()))
+    } catch {
+      // Si falla la consulta de admin, no bloquea el KPI -- sigue con todos.
     }
     const casos = rows.length
     const dias = rows.reduce((s, r) => s + (Number(r.total_dias_incapacidad) || 0), 0)

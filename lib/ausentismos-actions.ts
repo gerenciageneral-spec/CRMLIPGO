@@ -422,6 +422,18 @@ export async function getAnalisisAusentismoDiario(
     if (from > 200000) break
   }
 
+  // Administrativos NUNCA salen en este análisis (usuario 2026-09-14): no son
+  // de interés para medir ausentismo; su asistencia solo alimenta pago/PILA.
+  const { data: hcAdmin } = await supabase
+    .from("headcount")
+    .select("identificacion")
+    .eq("admin", true)
+    .or(clientes.map((c) => `idempresa.eq.${c}`).concat("idempresa.is.null").join(","))
+  const identificacionesAdmin = new Set((hcAdmin ?? []).map((h: any) => String(h.identificacion || "").trim()))
+  const filasSinAdmin = identificacionesAdmin.size > 0
+    ? rows.filter((r) => !identificacionesAdmin.has(String(r.identificacion || "").trim()))
+    : rows
+
   // La novedad evidencia el tipo: incapacidad (salud) vs falta no médica
   // (licencia no remunerada) vs planeada (vacaciones/descanso/licencias) vs retiro.
   const esIncap = (a: any) => String(a || "").toLowerCase().includes("incapacidad")
@@ -430,8 +442,8 @@ export async function getAnalisisAusentismoDiario(
   const tipoDe = (a: any) => esIncap(a) ? "incapacidad" : esFaltaNoMedica(a) ? "falta" : esRetiro(a) ? "retiro" : "planeada"
 
   // Años disponibles (de todo el set) y filtro año/mes en código.
-  const anios = Array.from(new Set(rows.map((r) => String(r.fecha ?? "").slice(0, 4)).filter(Boolean))).sort().reverse()
-  const filtradas = rows.filter((r) => {
+  const anios = Array.from(new Set(filasSinAdmin.map((r) => String(r.fecha ?? "").slice(0, 4)).filter(Boolean))).sort().reverse()
+  const filtradas = filasSinAdmin.filter((r) => {
     const f = String(r.fecha ?? "")
     if (anio && f.slice(0, 4) !== anio) return false
     if (mes && f.slice(5, 7) !== mes) return false
@@ -652,7 +664,7 @@ export async function getAusentismos(empresaId?: number | null): Promise<Ausenti
     console.error("[v0] Error fetching ausentismos:", error)
     return []
   }
-  const rows = (data ?? []) as Ausentismo[]
+  let rows = (data ?? []) as Ausentismo[]
 
   // ESTADO VIGENTE + VALOR DÍA del colaborador desde headcount (por identificación).
   //  - estado_colaborador queda CONGELADO al crear la fila; si la persona se retira
@@ -674,10 +686,13 @@ export async function getAusentismos(empresaId?: number | null): Promise<Ausenti
 
     const estadoHc = new Map<string, string>()
     const salarioHc = new Map<string, number>()
+    // Administrativos NUNCA salen en este módulo (usuario 2026-09-14): no son
+    // de interés para medir ausentismo; su asistencia solo alimenta pago/PILA.
+    const cedulasAdmin = new Set<string>()
     for (let off = 0; ; off += 1000) {
       const { data: hc } = await supabase
         .from("headcount")
-        .select("identificacion, estado, fecha_retiro, salario")
+        .select("identificacion, estado, fecha_retiro, salario, admin")
         .range(off, off + 999)
       if (!hc || hc.length === 0) break
       for (const h of hc) {
@@ -688,9 +703,11 @@ export async function getAusentismos(empresaId?: number | null): Promise<Ausenti
         estadoHc.set(k, retirado ? "RETIRADO" : "ACTIVO")
         const sal = Number(h.salario) || 0
         if (sal > 0) salarioHc.set(k, sal)
+        if (h.admin === true) cedulasAdmin.add(k)
       }
       if (hc.length < 1000) break
     }
+    if (cedulasAdmin.size > 0) rows = rows.filter((r) => !cedulasAdmin.has(normCedula(r.cedula)))
     const smlvActual = smlvDefault // SMLV vigente (año más reciente) = mínimo de hoy
     for (const r of rows) {
       const k = normCedula(r.cedula)

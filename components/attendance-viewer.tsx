@@ -15,6 +15,7 @@ import { AttendanceHistoricalDashboard } from "@/components/attendance-historica
 import VisorUbicaciones from "@/components/visor-ubicaciones"
 import { EditNovedadDialog, type RegistroParaEditarNovedad } from "@/components/attendance/edit-novedad-dialog"
 import { categoriaDeNovedad } from "@/lib/ausentismo-categorias"
+import { getPersonasAsistenciaAdministrativa } from "@/lib/asistencia-administrativa-actions"
 
 interface AttendanceRecord {
   id: number
@@ -90,9 +91,19 @@ export function AttendanceViewer() {
         return
       }
 
-      console.log("[v0] Attendance records loaded:", data.length)
-      setRecords(data || [])
-      applyFilters(data || [])
+      // Administrativos NUNCA salen en este visor -- no son de interés para
+      // medir asistencia/ausentismo (usuario 2026-09-14); su asistencia solo
+      // sirve para pago/PILA, que se calculan aparte (pagonomina/parafiscales)
+      // y no pasan por esta pantalla.
+      const personas = await getPersonasAsistenciaAdministrativa(selectedEmpresaId)
+      const identificacionesAdmin = new Set(
+        (personas.success ? personas.data : []).filter((p) => p.admin).map((p) => p.identificacion),
+      )
+      const dataSinAdmin = data.filter((r) => !identificacionesAdmin.has(String(r.identificacion || "").trim()))
+
+      console.log("[v0] Attendance records loaded:", dataSinAdmin.length)
+      setRecords(dataSinAdmin)
+      applyFilters(dataSinAdmin)
     } catch (error) {
       console.error("[v0] Error loading attendance:", error)
     } finally {
