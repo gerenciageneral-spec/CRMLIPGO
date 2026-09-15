@@ -485,6 +485,10 @@ async function fetchToneladasDelMes(empresaId: number, today: string): Promise<T
     .eq("IdEmpresa", empresaId)
     .gte("Fecha", inicioMes)
     .lte("Fecha", today)
+    // Tolva ("Tolva"/"Tolva f", solo ID1) es PRODUCCIÓN, no Cargue/Descargue/
+    // Distribución -- mismo criterio que app/api/lip-dashboard/route.ts.
+    .neq("Tipo de Operacion", "Tolva")
+    .neq("Tipo de Operacion", "Tolva f")
 
   const metaDiaTon = getMetaDiaForEmpresa(empresaId)
   const rows = rewriteMetaDiaRows(data, metaDiaTon)
@@ -533,6 +537,7 @@ export async function getGerenciaDashboardData(
       .select("pesoorden, tipooperacion, estado")
       .eq("idempresa", empresaId)
       .neq("tipooperacion", "Tolva")
+      .neq("tipooperacion", "Tolva f")
       .neq("tipooperacion", "proyeccion")
 
     const isFinalized = (e: string | null) => e === "Fin Operación" || e === "Finalizado LIP"

@@ -431,6 +431,11 @@ export async function getDashboardRecepcionData(
         // scripts/pagonomina_reemplazo.sql) -- sin esto inflaba el volumen y
         // los conteos de órdenes de ID3/ID4 en este dashboard.
         .neq("tipooperacion", "proyeccion")
+        // "Tolva"/"Tolva f" excluido (2026-09-15): es PRODUCCIÓN reclasificada
+        // (solo ID1), no una operación de Cargue/Descargue/Distribución a
+        // cliente -- mezclarla inflaba el volumen del día/mes de Indupan.
+        .neq("tipooperacion", "Tolva")
+        .neq("tipooperacion", "Tolva f")
         .order("fechacargue", { ascending: true })
         .range(from, from + PAGE_SIZE - 1)
 

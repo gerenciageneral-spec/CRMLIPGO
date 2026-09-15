@@ -20,6 +20,15 @@ export async function GET(request: Request) {
 
     const supabaseAdmin = await getSupabaseAdmin()
 
+    // Tolva ("Tolva"/"Tolva f", domingo) es PRODUCCIÓN -- reclasificada desde
+    // Liquidación Tolva, no una operación de Cargue/Descargue/Distribución a
+    // cliente -- y tiene su propio indicador OEE (Control de Piso). Solo
+    // ID1/Indupan genera este tipo de orden; se excluye de TODO este
+    // dashboard (día y mensual) para que "toneladas diarias/acumulado vs
+    // meta" no mezcle producción con operación real (antes ID1 mostraba
+    // hasta el doble del tonelaje real por esto).
+    const sinProduccion = (q: any) => q.neq("Tipo de Operacion", "Tolva").neq("Tipo de Operacion", "Tolva f")
+
     if (mode === "daily") {
       const colombiaDate =
         dateParam ||
@@ -38,33 +47,43 @@ export async function GET(request: Request) {
       const from7 = d7.toISOString().split("T")[0]
 
       const [metaRes, metaPrevRes, tonRes, tonPrevRes, meta7Res] = await Promise.all([
-        supabaseAdmin
-          .from("metadia")
-          .select("*")
-          .eq("IdEmpresa", empresaId)
-          .eq("Fecha", colombiaDate),
-        supabaseAdmin
-          .from("metadia")
-          .select("*")
-          .eq("IdEmpresa", empresaId)
-          .eq("Fecha", prevDate),
-        supabaseAdmin
-          .from("operaciones_desglosadas")
-          .select("*")
-          .eq("ID Proyecto", empresaId)
-          .eq("Fecha", colombiaDate),
-        supabaseAdmin
-          .from("operaciones_desglosadas")
-          .select("*")
-          .eq("ID Proyecto", empresaId)
-          .eq("Fecha", prevDate),
-        supabaseAdmin
-          .from("metadia")
-          .select("*")
-          .eq("IdEmpresa", empresaId)
-          .gte("Fecha", from7)
-          .lte("Fecha", colombiaDate)
-          .order("Fecha", { ascending: true }),
+        sinProduccion(
+          supabaseAdmin
+            .from("metadia")
+            .select("*")
+            .eq("IdEmpresa", empresaId)
+            .eq("Fecha", colombiaDate),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("metadia")
+            .select("*")
+            .eq("IdEmpresa", empresaId)
+            .eq("Fecha", prevDate),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("operaciones_desglosadas")
+            .select("*")
+            .eq("ID Proyecto", empresaId)
+            .eq("Fecha", colombiaDate),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("operaciones_desglosadas")
+            .select("*")
+            .eq("ID Proyecto", empresaId)
+            .eq("Fecha", prevDate),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("metadia")
+            .select("*")
+            .eq("IdEmpresa", empresaId)
+            .gte("Fecha", from7)
+            .lte("Fecha", colombiaDate)
+            .order("Fecha", { ascending: true }),
+        ),
       ])
 
       if (metaRes.error) {
@@ -122,34 +141,42 @@ export async function GET(request: Request) {
       const prevEnd = `${prevYear}-${String(prevMon).padStart(2, "0")}-${String(prevLastDay).padStart(2, "0")}`
 
       const [metaRes, metaPrevRes, tonRes, tonPrevRes] = await Promise.all([
-        supabaseAdmin
-          .from("metadia")
-          .select("*")
-          .eq("IdEmpresa", empresaId)
-          .gte("Fecha", startDate)
-          .lte("Fecha", endDate)
-          .order("Fecha", { ascending: true }),
-        supabaseAdmin
-          .from("metadia")
-          .select("*")
-          .eq("IdEmpresa", empresaId)
-          .gte("Fecha", prevStart)
-          .lte("Fecha", prevEnd)
-          .order("Fecha", { ascending: true }),
-        supabaseAdmin
-          .from("operaciones_desglosadas")
-          .select("*")
-          .eq("ID Proyecto", empresaId)
-          .gte("Fecha", startDate)
-          .lte("Fecha", endDate)
-          .order("Fecha", { ascending: true }),
-        supabaseAdmin
-          .from("operaciones_desglosadas")
-          .select("*")
-          .eq("ID Proyecto", empresaId)
-          .gte("Fecha", prevStart)
-          .lte("Fecha", prevEnd)
-          .order("Fecha", { ascending: true }),
+        sinProduccion(
+          supabaseAdmin
+            .from("metadia")
+            .select("*")
+            .eq("IdEmpresa", empresaId)
+            .gte("Fecha", startDate)
+            .lte("Fecha", endDate)
+            .order("Fecha", { ascending: true }),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("metadia")
+            .select("*")
+            .eq("IdEmpresa", empresaId)
+            .gte("Fecha", prevStart)
+            .lte("Fecha", prevEnd)
+            .order("Fecha", { ascending: true }),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("operaciones_desglosadas")
+            .select("*")
+            .eq("ID Proyecto", empresaId)
+            .gte("Fecha", startDate)
+            .lte("Fecha", endDate)
+            .order("Fecha", { ascending: true }),
+        ),
+        sinProduccion(
+          supabaseAdmin
+            .from("operaciones_desglosadas")
+            .select("*")
+            .eq("ID Proyecto", empresaId)
+            .gte("Fecha", prevStart)
+            .lte("Fecha", prevEnd)
+            .order("Fecha", { ascending: true }),
+        ),
       ])
 
       if (metaRes.error) {

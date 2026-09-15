@@ -1963,14 +1963,20 @@ async function _computeIndicadoresValores(
     // Toneladas (suma en memoria: pesovascula) + meta del periodo por sede.
     // "proyeccion" excluido (2026-09-08): residuo de un módulo manual
     // descontinuado en jul-2026, nunca fue tonelaje real (ver
-    // scripts/pagonomina_reemplazo.sql).
+    // scripts/pagonomina_reemplazo.sql). "Tolva"/"Tolva f" excluido
+    // (2026-09-15): es PRODUCCIÓN (solo ID1), no Cargue/Descargue/
+    // Distribución -- tiene su propio indicador OEE y su propia meta
+    // (EMPRESA_META_DIA_TON ya excluye Tolva, ver lib/empresa-meta-dia.ts);
+    // sin esto el % de cumplimiento de meta de tonelaje quedaba inflado.
     const tonRows = await pagAll((from, to) =>
       filtroFechaOrden(
         supabase
           .from("cabeceraoc")
           .select("pesovascula,idempresa,fechaorden")
           .in("idempresa", clientes)
-          .neq("tipooperacion", "proyeccion"),
+          .neq("tipooperacion", "proyeccion")
+          .neq("tipooperacion", "Tolva")
+          .neq("tipooperacion", "Tolva f"),
       )
         .order("id", { ascending: true })
         .range(from, to),
@@ -4581,7 +4587,14 @@ export async function getPanelOperacionLIP(
     const ciclo = rows.filter((r) => r.status && String(r.status).toLowerCase() === "finalizado").length
     const pdfO = rows.filter((r) => r.pdfoc).length
     const pdfP = rows.filter((r) => r.doccargue).length
-    const ton = rows.reduce((s, r) => s + (Number(r.pesovascula) || 0), 0)
+    // Tolva ("Tolva"/"Tolva f", solo ID1) es PRODUCCIÓN reclasificada, no
+    // Cargue/Descargue/Distribución a cliente -- tiene su propia meta
+    // (EMPRESA_META_DIA_TON ya la excluye) y su propio indicador OEE.
+    // Se excluye SOLO del tonelaje/cumplimiento de meta -- conteos de
+    // órdenes, SLA, evidencia y facturación pendiente siguen igual (no es
+    // lo que se reportó mezclado).
+    const rowsTon = rows.filter((r) => r.tipooperacion !== "Tolva" && r.tipooperacion !== "Tolva f")
+    const ton = rowsTon.reduce((s, r) => s + (Number(r.pesovascula) || 0), 0)
     const durs = rows
       .filter((r) => r.iniciocargue && r.fincargue)
       .map((r) => aMin(r.fincargue) - aMin(r.iniciocargue))
@@ -4590,7 +4603,7 @@ export async function getPanelOperacionLIP(
 
     // Cumplimiento de META de tonelaje (vs EMPRESA_META_DIA_TON × días operativos por cliente).
     const diasPorCliente: Record<number, Set<string>> = {}
-    for (const r of rows) {
+    for (const r of rowsTon) {
       const id = r.idempresa
       if (!diasPorCliente[id]) diasPorCliente[id] = new Set()
       if (r.fechaorden) diasPorCliente[id].add(String(r.fechaorden))
@@ -4601,13 +4614,18 @@ export async function getPanelOperacionLIP(
     }
     const cumplimientoMeta = metaPeriodo > 0 ? Math.round((ton / metaPeriodo) * 1000) / 10 : 0
 
-    // Series por mes (últimos 12)
+    // Series por mes (últimos 12) -- ordenes de TODAS, toneladas SIN Tolva.
     const mes: Record<string, { ordenes: number; toneladas: number }> = {}
     for (const r of rows) {
       const k = String(r.fechaorden || "").slice(0, 7)
       if (!k) continue
       mes[k] = mes[k] || { ordenes: 0, toneladas: 0 }
       mes[k].ordenes++
+    }
+    for (const r of rowsTon) {
+      const k = String(r.fechaorden || "").slice(0, 7)
+      if (!k) continue
+      mes[k] = mes[k] || { ordenes: 0, toneladas: 0 }
       mes[k].toneladas += Number(r.pesovascula) || 0
     }
     const porMes = Object.entries(mes)
@@ -4633,8 +4651,12 @@ export async function getPanelOperacionLIP(
         const id = r.idempresa
         cl[id] = cl[id] || { ordenes: 0, toneladas: 0, finc: 0 }
         cl[id].ordenes++
-        cl[id].toneladas += Number(r.pesovascula) || 0
         if (r.fincargue) cl[id].finc++
+      }
+      for (const r of rowsTon) {
+        const id = r.idempresa
+        cl[id] = cl[id] || { ordenes: 0, toneladas: 0, finc: 0 }
+        cl[id].toneladas += Number(r.pesovascula) || 0
       }
       porCliente = Object.entries(cl)
         .map(([id, v]) => ({
@@ -4894,7 +4916,7 @@ export async function getPanelOperacionLIP(
           cumplimiento: pct(finc, tot),
           tiempoCargue: tiempo,
           evidencia: pct(evid, tot),
-          productividad: tot > 0 ? Math.round((ton / tot) * 100) / 100 : 0, // ton/orden
+          productividad: rowsTon.length > 0 ? Math.round((ton / rowsTon.length) * 100) / 100 : 0, // ton/orden (sin Tolva)
           cumplimientoMeta,                       // % ejecutado vs meta de tonelaje
           metaPeriodo: Math.round(metaPeriodo),   // meta del periodo (ton)
         },
