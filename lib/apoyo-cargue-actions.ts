@@ -47,6 +47,13 @@ function esEspecialidad(v: any): boolean {
   return v === true || String(v).toLowerCase() === "true"
 }
 
+/** Suma horas ENTERAS a una hora "HH:MM" (envuelve pasada medianoche). */
+function sumarHoras(hora: string, horas: number): string {
+  const [h, m] = hora.split(":").map(Number)
+  const total = (h + horas) % 24
+  return `${String(total).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+}
+
 export interface PersonaPago {
   persona: string
   toneladas: number
@@ -170,7 +177,7 @@ export async function getPersonalApoyoDisponible(
 
     let q = admin
       .from("registroasistencia")
-      .select("id, nombre, puesto, especialidad, horasalidaprogramada")
+      .select("id, nombre, identificacion, puesto, especialidad, horasalidaprogramada")
       .eq("fecha", fecha)
       .is("asistencia", null) // excluye Ausentes
       .not("horaingreso", "is", null) // excluye programados que no han confirmado llegada (ver picking-actions.ts)
@@ -179,6 +186,26 @@ export async function getPersonalApoyoDisponible(
     if (idempresa) q = q.eq("idempresa", idempresa)
     const { data, error } = await q
     if (error) throw new Error(error.message)
+
+    // Horas Extra APROBADAS ese mismo día (Servicios Adicionales → Aprobar
+    // Turnos) EXTIENDEN el turno programado -- sin esto, alguien con una
+    // extensión aprobada aparecía "disponible para apoyo" desde su hora
+    // original, mientras en realidad seguía comprometido en su propio
+    // puesto. Cruce por cédula primero (más confiable), con caída a nombre
+    // para solicitudes viejas sin cédula guardada (mismo criterio que
+    // app/api/extra-hours/route.ts). Usuario 2026-09-14.
+    const horasExtraPorPersona = new Map<string, number>()
+    if ((data || []).some((r: any) => esEspecialidad(r.especialidad))) {
+      const { data: extras } = await admin
+        .from("solicitud_horas_extras")
+        .select("nombre_empleado, identificacion_empleado, cantidad")
+        .eq("fecharequerida", fecha)
+        .eq("idempresa", idempresa)
+      for (const ex of extras || []) {
+        const key = String(ex.identificacion_empleado || "").trim() || `nombre:${String(ex.nombre_empleado || "").trim().toUpperCase()}`
+        horasExtraPorPersona.set(key, (horasExtraPorPersona.get(key) || 0) + (Number(ex.cantidad) || 0))
+      }
+    }
 
     const colombiaDate = await getColombiaDateTime()
     const esHoy = fecha === colombiaDate.toLocaleDateString("en-CA")
@@ -189,7 +216,13 @@ export async function getPersonalApoyoDisponible(
       if (!esHoy) return true // fecha pasada: su turno ya terminó
       const horaSalidaProgramada = (r.horasalidaprogramada || "").toString().slice(0, 5)
       if (!horaSalidaProgramada) return true // sin dato programado: se deja disponible (dato incompleto, no regla de negocio)
-      return horaActual >= horaSalidaProgramada
+      const cedula = String(r.identificacion || "").trim()
+      const horasExtra =
+        horasExtraPorPersona.get(cedula) ??
+        horasExtraPorPersona.get(`nombre:${String(r.nombre || "").trim().toUpperCase()}`) ??
+        0
+      const horaEfectiva = horasExtra > 0 ? sumarHoras(horaSalidaProgramada, horasExtra) : horaSalidaProgramada
+      return horaActual >= horaEfectiva
     })
 
     const out: PersonalApoyoDisponible[] = disponibles.map((r: any) => ({
