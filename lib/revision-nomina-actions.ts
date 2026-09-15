@@ -33,6 +33,16 @@ export interface DiaRevision {
   recargos: number
   domingo: number
   excedente: number // destajo con signo (prod - base); 0 si no es destajo
+  /** Bono de apoyo en cargue (especialidad=true CON tonelaje real ese día,
+   *  ver `bonif_prestacional` en pagonomina) -- SIEMPRE de signo positivo, se
+   *  paga completo sin restar la base del turno. Ya sumaba al "Neto de la
+   *  quincena" pero no se exponía por día -- por eso la pantalla mostraba el
+   *  turno pagado normal y el tonelaje movido, pero NINGÚN valor en la fila
+   *  del día para esa plata, aunque sí estuviera contada en el total.
+   *  Confirmado con caso real 2026-09-14 (JUAN DEIVER ROSADO ARAGON,
+   *  ARMANDO CESAR RODRIGUEZ MANJARREZ, ROBERTO ENRIQUE HOYOS VIDEZ, orden
+   *  AVI202609088900). */
+  bonoApoyoCargue: number
   total: number
   esDestajo: boolean
   anomalia: boolean // Cargue/Descargue con 0 toneladas (a corregir)
@@ -528,6 +538,7 @@ function armarPersona(
         recargos,
         domingo,
         excedente,
+        bonoApoyoCargue,
         total,
         esDestajo,
         anomalia,

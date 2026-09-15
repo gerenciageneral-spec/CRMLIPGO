@@ -540,15 +540,26 @@ function Resultado({
                         {d.esDestajo && d.hcDia > 0 ? d.hcDia : ""}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {d.esDestajo ? money(d.pagoProduccion) : ""}
+                        {d.esDestajo ? money(d.pagoProduccion) : d.bonoApoyoCargue !== 0 ? money(d.pagoProduccion) : ""}
                       </TableCell>
                       <TableCell className="text-right">{d.base ? money(d.base) : ""}</TableCell>
                       <TableCell className="text-right">{d.recargos ? money(d.recargos) : ""}</TableCell>
                       <TableCell className="text-right">{d.domingo ? money(d.domingo) : ""}</TableCell>
                       <TableCell
-                        className={`text-right ${d.esDestajo ? (d.excedente >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400") : ""}`}
+                        className={`text-right ${
+                          d.esDestajo
+                            ? d.excedente >= 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-rose-600 dark:text-rose-400"
+                            : d.bonoApoyoCargue !== 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : ""
+                        }`}
                       >
-                        {d.esDestajo ? signed(d.excedente) : ""}
+                        {d.esDestajo ? signed(d.excedente) : d.bonoApoyoCargue !== 0 ? signed(d.bonoApoyoCargue) : ""}
+                        {!d.esDestajo && d.bonoApoyoCargue !== 0 && (
+                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">apoyo</span>
+                        )}
                         {d.esDestajo && d.diaCierre && (
                           <span className="ml-1 text-[10px] font-normal text-amber-600 dark:text-amber-400">
                             diferido
