@@ -185,6 +185,11 @@ export const groups: Group[] = [
       {
         title: "Operación Lip",
         modules: [
+          // Panel ejecutivo del coordinador: personal, cobertura de turnos,
+          // pendientes del dia, solicitudes de personal y pago de la quincena,
+          // todo de la empresa seleccionada. No calcula nada por su cuenta:
+          // reune las cifras de los modulos que ya las producen.
+          { name: "Operación del día", icon: LayoutDashboard },
           { name: "Picking", icon: PackagePlus },
           { name: "Packing", icon: Package },
           { name: "Ver Picking/Packing", icon: Eye },

@@ -64,6 +64,9 @@ export interface UserPermissions {
   // tiempo real). Coincide con el nombre de la columna en
   // `permisos_usuarios` (todo en minuscula, sin separador).
   controlpiso: boolean
+  // Panel "Operación del día" (Operación LIP). Coincide con el nombre de la
+  // columna en `permisos_usuarios`.
+  operacion_dia: boolean
   asignacion_lotes: boolean
   historial_lotes: boolean
   registro_sanitario: boolean
@@ -320,6 +323,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Gestión de Dotación EPP": "dotacion_epp",
   "Gestión de Capacitaciones": "capacitaciones",
   "Asistencia a Capacitaciones": "asistencia_capacitaciones",
+  "Operación del día": "operacion_dia",
   "Solicitud de Personal": "solicitud_personal",
   "Evaluaciones de Desempeño": "evaluacionpersonal",
   "Evidencia de Inducciones": "evidenciasinducciones",

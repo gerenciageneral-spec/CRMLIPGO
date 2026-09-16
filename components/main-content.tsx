@@ -140,6 +140,7 @@ import { EvaluacionAreas } from "@/components/sst/evaluacion-areas"
 import { PanelOperacionLIP } from "@/components/sst/panel-operacion-lip"
 import ControlToneladas from "@/components/control-toneladas"
 import CentroCoordinacion from "@/components/centro-coordinacion"
+import { OperacionDelDia } from "@/components/operacion/operacion-del-dia"
 import { MapaInteraccionProceso } from "@/components/sst/mapa-interaccion-proceso"
 import { MapaProcesos } from "@/components/sig/mapa-procesos"
 import { PanelInventarioLIP } from "@/components/sst/panel-inventario-lip"
@@ -302,6 +303,7 @@ export function MainContent({
       "Gestión de Dotación EPP": "dotacion_epp",
       "Gestión de Capacitaciones": "capacitaciones",
       "Asistencia a Capacitaciones": "asistencia_capacitaciones",
+      "Operación del día": "operacion_dia",
       "Solicitud de Personal": "solicitud_personal",
       "Evaluaciones de Desempeño": "evaluacionpersonal",
       "Gestión de Solicitudes": "gestionsolicitudes",
@@ -985,6 +987,10 @@ export function MainContent({
           ) : selectedModule === "Control de Toneladas" ? (
             <PermissionGuard moduleName="Control de Toneladas">
               <ControlToneladas />
+            </PermissionGuard>
+          ) : selectedModule === "Operación del día" ? (
+            <PermissionGuard moduleName="Operación del día">
+              <OperacionDelDia />
             </PermissionGuard>
           ) : selectedModule === "Centro de Coordinación" ? (
             <PermissionGuard moduleName="Centro de Coordinación">
