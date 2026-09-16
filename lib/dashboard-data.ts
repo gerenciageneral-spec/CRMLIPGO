@@ -366,6 +366,10 @@ export const groups: Group[] = [
           // Seguimiento del costo recuperable de incapacidades (EPS/ARL).
           // Comparte el permiso de "Ausentismos".
           { name: "Recobro de Incapacidades", icon: CreditCard },
+          // La usuaria reporta la conducta y solicita la medida; el empleador
+          // cita a descargos y decide. Permiso propio: el caso contiene el
+          // relato de una conducta y el nombre de testigos.
+          { name: "Procesos Disciplinarios", icon: Scale },
         ],
       },
       {

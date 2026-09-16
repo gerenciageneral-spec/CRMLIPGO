@@ -104,6 +104,7 @@ import CapacitacionesAsistencia from "@/components/rrhh/capacitaciones-asistenci
 // Reconstruido: requisicion con causal legal del Art. 77 Ley 50/1990 y costo
 // mensual estimado con los porcentajes reales de prestaciones y parafiscales.
 import RequisicionPersonal from "@/components/rrhh/requisicion-personal"
+import ProcesosDisciplinarios from "@/components/rrhh/procesos-disciplinarios"
 import EvaluacionesDashboard from "@/components/rrhh/evaluaciones-dashboard"
 import InduccionesEvidenciaDashboard from "@/components/rrhh/inducciones-evidencia-dashboard"
 import InduccionesManagement from "@/components/rrhh/inducciones-management"
@@ -702,6 +703,10 @@ export function MainContent({
 ) : selectedModule === "Gestión de Colaboradores" ? (
   <PermissionGuard moduleName="Gestión de Colaboradores">
     <GestionColaboradores />
+  </PermissionGuard>
+) : selectedModule === "Procesos Disciplinarios" ? (
+  <PermissionGuard moduleName="Procesos Disciplinarios">
+    <ProcesosDisciplinarios />
   </PermissionGuard>
 ) : selectedModule === "Carpetas de Trabajadores" ? (
   <PermissionGuard moduleName="Carpetas de Trabajadores">

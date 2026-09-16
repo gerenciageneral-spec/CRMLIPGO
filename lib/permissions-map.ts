@@ -258,6 +258,10 @@ export interface UserPermissions {
   gh_entrevistas: boolean
   gh_bienestar: boolean
   gh_participacion: boolean
+  // Procesos disciplinarios. Permiso PROPIO: el caso contiene el relato de una
+  // conducta, el nombre de testigos y la decision que se tomo. No es
+  // informacion operativa y no se hereda del permiso de novedades.
+  procesos_disciplinarios: boolean
 }
 
 export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
@@ -476,4 +480,5 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   Entrevistas: "gh_entrevistas",
   "Programa de Bienestar": "gh_bienestar",
   "Participación y Evidencias": "gh_participacion",
+  "Procesos Disciplinarios": "procesos_disciplinarios",
 }
