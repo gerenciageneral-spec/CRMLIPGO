@@ -22,7 +22,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { AlertTriangle, Download, FileText, Loader2, Scale, Search, Shield } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import { AlertTriangle, Check, ChevronsUpDown, Download, FileText, Loader2, Scale, Shield } from "lucide-react"
 import {
   avanzarEstadoDisciplinario,
   crearProcesoDisciplinario,
@@ -57,7 +66,7 @@ export default function ProcesosDisciplinarios() {
   const [generando, setGenerando] = useState<string | null>(null)
 
   // Formulario
-  const [buscar, setBuscar] = useState("")
+  const [comboAbierto, setComboAbierto] = useState(false)
   const [persona, setPersona] = useState<{ identificacion: string; nombre: string; cargo: string | null } | null>(null)
   const [conductaId, setConductaId] = useState("")
   const [fechaHecho, setFechaHecho] = useState(hoyColombia())
@@ -87,15 +96,6 @@ export default function ProcesosDisciplinarios() {
 
   const conducta = conductaPorId(conductaId)
 
-  const personasFiltradas = useMemo(() => {
-    if (!data) return []
-    const t = buscar.trim().toLowerCase()
-    if (!t) return []
-    return data.trabajadores
-      .filter((p) => p.nombre.toLowerCase().includes(t) || p.identificacion.includes(t))
-      .slice(0, 20)
-  }, [data, buscar])
-
   async function radicar() {
     if (!persona || !selectedEmpresaId) return
     setGuardando(true)
@@ -121,7 +121,7 @@ export default function ProcesosDisciplinarios() {
       title: `Caso ${r.radicado} radicado`,
       description: "El empleador debe citar a descargos antes de cualquier sanción.",
     })
-    setPersona(null); setBuscar(""); setConductaId(""); setRelato("")
+    setPersona(null); setConductaId(""); setRelato("")
     setHoraHecho(""); setLugar(""); setTestigo(""); setTestigoCargo("")
     cargar()
   }
@@ -241,52 +241,80 @@ export default function ProcesosDisciplinarios() {
           </div>
 
           <div className="space-y-3 p-4">
+            {/* Combobox sobre el personal ACTIVO del head count. La lista la
+                trae getDisciplinarios ya filtrada por empresa, estado Activo y
+                sin cuentas de prueba: no se puede radicar un caso contra
+                alguien que ya no esta vinculado. */}
             <div>
               <Label className="text-xs">Colaborador</Label>
-              {persona ? (
-                <div className="mt-1 flex items-center gap-2 rounded border border-border px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {persona.nombre}
-                    {persona.cargo ? ` · ${persona.cargo}` : ""}
-                  </span>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setPersona(null)}>
-                    cambiar
+              <Popover open={comboAbierto} onOpenChange={setComboAbierto}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={comboAbierto}
+                    className="mt-1 h-9 w-full justify-between font-normal"
+                  >
+                    {persona ? (
+                      <span className="min-w-0 truncate">
+                        {persona.nombre}
+                        {persona.cargo ? ` · ${persona.cargo}` : ""}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Selecciona el colaborador…</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="relative mt-1">
-                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nombre o cédula…"
-                      value={buscar}
-                      onChange={(e) => setBuscar(e.target.value)}
-                      className="h-9 pl-7 text-sm"
-                    />
-                  </div>
-                  {buscar.trim() && (
-                    <div className="mt-1 max-h-44 divide-y overflow-y-auto rounded border">
-                      {personasFiltradas.length === 0 ? (
-                        <p className="p-3 text-center text-xs text-muted-foreground">Nadie coincide.</p>
-                      ) : (
-                        personasFiltradas.map((p) => (
-                          <button
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command
+                    filter={(value, search) =>
+                      value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                    }
+                  >
+                    <CommandInput placeholder="Buscar por nombre o cédula…" className="h-9" />
+                    <CommandList>
+                      <CommandEmpty className="py-4 text-center text-xs">
+                        {data?.trabajadores.length
+                          ? "Nadie coincide."
+                          : "No hay personal activo en esta empresa."}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {(data?.trabajadores ?? []).map((p) => (
+                          <CommandItem
                             key={p.identificacion}
-                            type="button"
-                            onClick={() => { setPersona(p); setBuscar("") }}
-                            className="flex w-full flex-col px-2 py-1.5 text-left hover:bg-muted/50"
+                            // El value lleva nombre Y cédula para poder buscar
+                            // por cualquiera de los dos.
+                            value={`${p.nombre} ${p.identificacion}`}
+                            onSelect={() => {
+                              setPersona(p)
+                              setComboAbierto(false)
+                            }}
                           >
-                            <span className="truncate text-sm">{p.nombre}</span>
-                            <span className="truncate font-mono text-[10px] text-muted-foreground">
-                              {p.identificacion}{p.cargo ? ` · ${p.cargo}` : ""}
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                persona?.identificacion === p.identificacion
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm">{p.nombre}</span>
+                              <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                                {p.identificacion}
+                                {p.cargo ? ` · ${p.cargo}` : ""}
+                              </span>
                             </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Solo personal activo en el head count de esta empresa.
+              </p>
             </div>
 
             <div>

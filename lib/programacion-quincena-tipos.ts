@@ -112,6 +112,15 @@ export interface ProgramacionQuincenaData {
   equipos: EquipoResumen[]
   patrones: PatronResumen[]
   cobertura: FilaCobertura[]
+  /**
+   * Puestos sobre los que se puede declarar demanda.
+   *
+   * Salen de `tarifasturnos` --el MISMO catalogo que usa la programacion
+   * diaria-- para que lo que se exige coincida con lo que se puede programar.
+   * Si se ofreciera una lista propia, se podria pedir gente para un puesto que
+   * nadie puede asignar.
+   */
+  puestos: string[]
   /** Totales de la quincena, para la barra de resumen. */
   totales: {
     personas: number

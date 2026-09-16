@@ -310,8 +310,11 @@ export async function getOperacionDia(
           id: "ausentismos-borrador",
           nivel: "medio",
           titulo: `${n} ausentismo${n === 1 ? "" : "s"} sin completar`,
-          detalle: "Creados desde el control diario. Sin completarlos no se puede gestionar el recobro.",
-          moduloDestino: "Ausentismos",
+          detalle: "Creados desde el control diario. Se completan registrando la novedad del trabajador.",
+          // Lleva a Novedades de personal --no a Ausentismos-- porque es ahi
+          // donde se registra la novedad que completa el borrador. Ausentismos
+          // es la matriz de consulta, no el lugar donde se captura.
+          moduloDestino: "Novedades de personal",
           textoBoton: "Completar",
         })
       }

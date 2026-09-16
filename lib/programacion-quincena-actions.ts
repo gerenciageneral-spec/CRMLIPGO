@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getPuestosFromTarifas } from "@/lib/programacion-turnos-actions"
 import { getCurrentUsuarioForInsert } from "@/lib/user-context"
 import type {
   CeldaCobertura,
@@ -345,6 +346,18 @@ export async function getProgramacionQuincena(
     for (const x of personas) x.horasQuincena = Math.round(x.horasQuincena * 10) / 10
 
     // --- COBERTURA: REQUERIDO VS ASIGNADO ---------------------------------
+    // Catalogo de puestos: el mismo que ofrece la programacion diaria.
+    let puestos: string[] = []
+    try {
+      const catalogo = await getPuestosFromTarifas(empresaId)
+      puestos = Array.from(new Set(catalogo.map((p: any) => String(p.puesto || "").trim())))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "es"))
+    } catch (e: any) {
+      avisos.push("No se pudo leer el catálogo de puestos.")
+      console.error("[v0] getProgramacionQuincena puestos:", e?.message ?? e)
+    }
+
     const cobertura: FilaCobertura[] = []
     if (!faltaMigracion) {
       try {
@@ -417,6 +430,7 @@ export async function getProgramacionQuincena(
         equipos,
         patrones,
         cobertura,
+        puestos,
         totales: {
           personas: personas.length,
           diasProgramados,

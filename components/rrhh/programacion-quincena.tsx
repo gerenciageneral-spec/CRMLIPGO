@@ -2,10 +2,9 @@
 
 // PROGRAMACIÓN DEL PERSONAL — vista de quincena.
 //
-// Tres pestañas sobre la misma quincena:
-//  · Cobertura        — cuánta gente se necesita por puesto y turno vs cuánta hay
-//  · Equipos y patrones — grupos de trabajo y su rotación
-//  · Detalle por persona — la grilla persona × día
+// Dos pestañas sobre la misma quincena:
+//  · Cobertura          — cuánta gente se necesita por puesto y turno vs cuánta hay
+//  · Detalle por persona — la grilla persona × día, con el puesto de cada día
 //
 // Convive con la programación diaria que ya existe: esta vista LEE la quincena
 // completa y permite quitar asignaciones; para crear turnos se sigue usando la
@@ -24,6 +23,7 @@ import {
   Clock,
   Loader2,
   Moon,
+  Plus,
   Search,
   Users,
 } from "lucide-react"
@@ -35,6 +35,25 @@ import {
 import type { ProgramacionQuincenaData, TurnoDef } from "@/lib/programacion-quincena-tipos"
 
 const NUM = new Intl.NumberFormat("es-CO")
+
+/**
+ * Color por PUESTO para la grilla.
+ *
+ * Se asigna por posición dentro de la lista ordenada de puestos del periodo,
+ * no al azar: así el mismo puesto conserva su color entre recargas y entre
+ * quincenas, que es lo que permite leer la grilla de un vistazo.
+ */
+const PALETA_PUESTOS = [
+  "#0d9488", "#7dd3fc", "#f59e0b", "#a855f7", "#ef4444",
+  "#10b981", "#3b82f6", "#f97316", "#14b8a6", "#8b5cf6",
+  "#ec4899", "#84cc16", "#06b6d4", "#d946ef", "#eab308",
+]
+
+function colorDePuesto(puesto: string | null, orden: string[]): string {
+  if (!puesto) return "#94a3b8"
+  const i = orden.indexOf(puesto)
+  return i >= 0 ? PALETA_PUESTOS[i % PALETA_PUESTOS.length] : "#64748b"
+}
 
 function hoyColombia(): Date {
   const s = new Intl.DateTimeFormat("en-CA", {
@@ -102,6 +121,8 @@ export function ProgramacionQuincena() {
   const [buscar, setBuscar] = useState("")
   const [equipoFiltro, setEquipoFiltro] = useState<number | null>(null)
   const [editDemanda, setEditDemanda] = useState<{ puesto: string; turno: string; valor: string } | null>(null)
+  // Alta de demanda para un puesto que todavia no tiene fila.
+  const [nuevaDemanda, setNuevaDemanda] = useState<{ puesto: string; turno: string; valor: string } | null>(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -128,6 +149,19 @@ export function ProgramacionQuincena() {
     setQuincena(q as 1 | 2); setMes(m); setAnio(a)
   }
 
+  // Puestos que realmente aparecen en la quincena. Es la leyenda: solo se
+  // listan los que se usaron, no todo el catálogo.
+  const puestosEnUso = useMemo(() => {
+    if (!data) return []
+    const s = new Set<string>()
+    for (const p of data.personas) {
+      for (const c of Object.values(p.dias)) {
+        if (c.puesto && !c.novedad) s.add(c.puesto)
+      }
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, "es"))
+  }, [data])
+
   const personasFiltradas = useMemo(() => {
     if (!data) return []
     const t = buscar.trim().toLowerCase()
@@ -148,19 +182,31 @@ export function ProgramacionQuincena() {
     cargar()
   }
 
-  async function guardarReq() {
-    if (!editDemanda || !selectedEmpresaId) return
+  async function guardarReq(
+    d: { puesto: string; turno: string; valor: string } | null,
+    esNueva = false,
+  ) {
+    if (!d || !selectedEmpresaId) return
+    if (!d.puesto || !d.turno) {
+      toast({ title: "Falta el puesto o el turno", variant: "destructive" })
+      return
+    }
     const r = await guardarDemanda({
       empresaId: selectedEmpresaId,
-      puesto: editDemanda.puesto,
-      turnoCodigo: editDemanda.turno,
-      requeridos: Number(editDemanda.valor) || 0,
+      puesto: d.puesto,
+      turnoCodigo: d.turno,
+      requeridos: Number(d.valor) || 0,
     })
     if (!r.success) {
       toast({ title: "No se pudo guardar", description: r.message, variant: "destructive" })
       return
     }
-    setEditDemanda(null)
+    toast({
+      title: "Demanda guardada",
+      description: `${d.puesto} · ${d.turno}: ${Number(d.valor) || 0} persona(s) por día.`,
+    })
+    if (esNueva) setNuevaDemanda(null)
+    else setEditDemanda(null)
     cargar()
   }
 
@@ -275,7 +321,6 @@ export function ProgramacionQuincena() {
       <Tabs defaultValue="cobertura">
         <TabsList>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
-          <TabsTrigger value="equipos">Equipos y patrones</TabsTrigger>
           <TabsTrigger value="detalle">Detalle por persona</TabsTrigger>
         </TabsList>
 
@@ -290,6 +335,21 @@ export function ProgramacionQuincena() {
                 </p>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    setNuevaDemanda({
+                      puesto: d.puestos[0] ?? "",
+                      turno: d.turnos[0]?.codigo ?? "",
+                      valor: "0",
+                    })
+                  }
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Definir puesto
+                </Button>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" /> cubierto
                 </span>
@@ -301,6 +361,63 @@ export function ProgramacionQuincena() {
                 </span>
               </div>
             </div>
+
+            {/* Alta de demanda: cuánta gente se necesita en un puesto y turno.
+                Los puestos salen de `tarifasturnos`, el MISMO catálogo con el
+                que se programa: así lo que se exige coincide siempre con lo que
+                se puede asignar. */}
+            {nuevaDemanda && (
+              <div className="flex flex-wrap items-end gap-2 border-b border-border bg-muted/30 px-4 py-3">
+                <div>
+                  <label className="block text-[11px] text-muted-foreground">Puesto</label>
+                  <select
+                    value={nuevaDemanda.puesto}
+                    onChange={(e) => setNuevaDemanda({ ...nuevaDemanda, puesto: e.target.value })}
+                    className="mt-1 h-8 w-56 rounded border bg-background px-2 text-xs"
+                  >
+                    {d.puestos.length === 0 && <option value="">Sin puestos en el catálogo</option>}
+                    {d.puestos.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-muted-foreground">Turno</label>
+                  <select
+                    value={nuevaDemanda.turno}
+                    onChange={(e) => setNuevaDemanda({ ...nuevaDemanda, turno: e.target.value })}
+                    className="mt-1 h-8 w-40 rounded border bg-background px-2 text-xs"
+                  >
+                    {d.turnos.length === 0 && <option value="">Sin turnos definidos</option>}
+                    {d.turnos.map((t) => (
+                      <option key={t.codigo} value={t.codigo}>
+                        {t.codigo} · {t.horaInicio}–{t.horaFin}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-muted-foreground">Personas por día</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={nuevaDemanda.valor}
+                    onChange={(e) => setNuevaDemanda({ ...nuevaDemanda, valor: e.target.value })}
+                    className="mt-1 h-8 w-24 text-sm"
+                  />
+                </div>
+                <Button size="sm" onClick={() => guardarReq(nuevaDemanda, true)}>
+                  Guardar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setNuevaDemanda(null)}>
+                  Cancelar
+                </Button>
+                <p className="w-full text-[11px] text-muted-foreground">
+                  Aplica a todos los días de la quincena. Para cambiar un día puntual, edítalo
+                  desde su celda.
+                </p>
+              </div>
+            )}
 
             {d.cobertura.length === 0 ? (
               <div className="px-4 py-10 text-center">
@@ -399,7 +516,7 @@ export function ProgramacionQuincena() {
                     className="mt-1 h-8 w-28 text-sm"
                   />
                 </div>
-                <Button size="sm" onClick={guardarReq}>Guardar</Button>
+                <Button size="sm" onClick={() => guardarReq(editDemanda)}>Guardar</Button>
                 <Button size="sm" variant="outline" onClick={() => setEditDemanda(null)}>
                   Cancelar
                 </Button>
@@ -412,105 +529,6 @@ export function ProgramacionQuincena() {
         </TabsContent>
 
         {/* ---------------- EQUIPOS Y PATRONES ---------------- */}
-        <TabsContent value="equipos" className="pt-3">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="rounded-xl border border-border bg-card">
-              <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">Equipos</h2>
-                <p className="text-xs text-muted-foreground">
-                  Un patrón aplica a todo el grupo de una vez.
-                </p>
-              </div>
-              {d.equipos.length === 0 ? (
-                <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  Todavía no hay equipos. Hoy la gente solo se agrupa por empresa y por puesto.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {d.equipos.map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                        style={{ background: e.color ?? "#0d9488" }}
-                      >
-                        {e.nombre.slice(0, 1).toUpperCase()}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{e.nombre}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {e.integrantes} {e.integrantes === 1 ? "persona" : "personas"}
-                          {e.area ? ` · ${e.area}` : ""}
-                          {e.patronNombre ? ` · ${e.patronNombre}` : " · sin patrón"}
-                        </p>
-                      </div>
-                      {e.horasSemana != null && (
-                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
-                          {e.horasSemana} h/sem
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="rounded-xl border border-border bg-card">
-              <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">Patrones de rotación</h2>
-                <p className="text-xs text-muted-foreground">
-                  La secuencia se repite a lo largo de la quincena.
-                </p>
-              </div>
-              {d.patrones.length === 0 ? (
-                <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No hay patrones definidos.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {d.patrones.map((pt) => (
-                    <li key={pt.id} className="px-4 py-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{pt.nombre}</p>
-                        {pt.horasSemana != null && (
-                          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
-                            {pt.horasSemana} h/sem
-                          </span>
-                        )}
-                      </div>
-                      {pt.descripcion && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">{pt.descripcion}</p>
-                      )}
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {pt.secuencia.map((c, i) => (
-                          <span
-                            key={i}
-                            className="rounded px-1.5 py-0.5 font-mono text-[10px]"
-                            style={{
-                              background:
-                                c === "D" ? "#f1f5f9"
-                                : d.turnos.find((t) => t.codigo === c)?.color ?? "#0d9488",
-                              color: c === "D" ? "#64748b" : "#fff",
-                            }}
-                          >
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="border-t border-border px-4 py-2.5">
-                <p className="text-[11px] text-muted-foreground">
-                  Las horas por semana son las <strong>declaradas</strong> en cada patrón. El sistema
-                  no valida el límite legal todavía: no calcula la jornada real de cada persona.
-                </p>
-              </div>
-            </section>
-          </div>
-        </TabsContent>
-
-        {/* ---------------- DETALLE POR PERSONA ---------------- */}
         <TabsContent value="detalle" className="pt-3">
           <section className="rounded-xl border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -546,6 +564,27 @@ export function ProgramacionQuincena() {
                 </div>
               </div>
             </div>
+
+            {/* Leyenda de puestos: cada color de la grilla dice en qué puesto
+                estuvo la persona ese día. */}
+            {puestosEnUso.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-2.5">
+                <span className="text-[11px] text-muted-foreground">Puesto:</span>
+                {puestosEnUso.map((p) => (
+                  <span key={p} className="flex items-center gap-1 text-[11px]">
+                    <span
+                      className="h-2.5 w-2.5 rounded-sm"
+                      style={{ background: colorDePuesto(p, puestosEnUso) }}
+                    />
+                    {p}
+                  </span>
+                ))}
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-slate-200" />
+                  novedad
+                </span>
+              </div>
+            )}
 
             {personasFiltradas.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-muted-foreground">
@@ -606,7 +645,11 @@ export function ProgramacionQuincena() {
                                   title={`${c.puesto ?? ""} ${c.horaEntrada ?? ""}-${c.horaSalida ?? ""}${c.marco ? " · ya marcó" : ""} — clic para quitar`}
                                   onClick={() => c.id && quitar(c.id, per.nombre, dd.fecha)}
                                   className="inline-block rounded px-1 py-0.5 font-mono text-[10px] text-white hover:opacity-80"
-                                  style={{ background: turno?.color ?? "#64748b" }}
+                                  // El color lo da el PUESTO: es lo que se
+                                  // quiere leer de un vistazo en la grilla
+                                  // --dónde estuvo cada quien-- y el turno ya
+                                  // se ve en el código de la celda.
+                                  style={{ background: colorDePuesto(c.puesto, puestosEnUso) }}
                                 >
                                   {turno?.codigo ?? (c.horaEntrada ? c.horaEntrada.slice(0, 2) : "?")}
                                 </button>
