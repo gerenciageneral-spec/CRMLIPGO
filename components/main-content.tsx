@@ -75,7 +75,9 @@ import AttendanceRegistration from "@/components/attendance-registration" // Add
 import AttendanceTable from "@/components/attendance-table" // Added import for attendance table
 import { ExtraHoursAssignment } from "@/components/extra-hours-assignment" // Added import for extra hours assignment module
 import { ApoyoCargue } from "@/components/apoyo-cargue" // Added import for apoyo en cargue module
-import PersonnelNotices from "@/components/personnel-notices" // Added import for personnel notices module
+// Reconstruido: reportar la novedad y ver su efecto en la quincena en una sola
+// pantalla, con el impacto en pesos tomado de la vista que liquida.
+import NovedadesTiempoReal from "@/components/rrhh/novedades-tiempo-real" // Added import for personnel notices module
 import AsistenciaAdministrativa from "@/components/rrhh/asistencia-administrativa"
 import GestionTurnos from "@/components/rrhh/gestion-turnos" // CRUD de turnos (tabla tarifasturnos)
 // Envoltorio con dos pestañas: la programación diaria de siempre (la que
@@ -853,7 +855,7 @@ export function MainContent({
             </PermissionGuard>
           ) : selectedModule === "Novedades de personal" ? (
             <PermissionGuard moduleName="Novedades de personal">
-              <PersonnelNotices />
+              <NovedadesTiempoReal />
             </PermissionGuard>
           ) : selectedModule === "Asistencia Administrativa" ? (
             <PermissionGuard moduleName="Asistencia Administrativa">
