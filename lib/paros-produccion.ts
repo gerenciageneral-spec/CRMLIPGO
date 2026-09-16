@@ -32,9 +32,31 @@ export function pad2(n: number): string {
   return String(n).padStart(2, "0")
 }
 
-// Fecha (YYYY-MM-DD) de hoy en UTC (para el filtro "hoy").
+// Fecha (YYYY-MM-DD) de HOY para el filtro por defecto.
+//
+// OJO: se toma en hora de COLOMBIA, no en UTC, aunque el resto del modulo
+// trabaje en hora literal.
+//
+// Antes se formateaba en UTC y, a partir de las 19:00 hora de Colombia, ya era
+// el dia siguiente en UTC: "Reporte de Paros" abria en el dia siguiente y salia
+// VACIO toda la tarde-noche. El dashboard ya lo habia corregido de su lado
+// (control-piso.tsx), pero esta copia se quedo atras y el bug seguia vivo en
+// Reporte de Paros, que es justamente el modulo que se usa al cierre del turno.
+//
+// No es contradictorio con el resto del archivo: los RANGOS de consulta si se
+// arman con los digitos literales (...T00:00:00Z), porque `fecha_hora` guarda
+// la hora de pared de Colombia etiquetada como UTC. Justamente por eso el
+// limite del dia tiene que ser el dia calendario COLOMBIANO: asi los digitos
+// del rango coinciden con los digitos almacenados.
+//
+// El nombre se conserva para no tocar a los consumidores.
 export function utcDateStr(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
 }
 
 export function nextDateStr(dateStr: string): string {
