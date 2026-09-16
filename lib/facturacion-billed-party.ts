@@ -10,7 +10,7 @@
 // QUÉ SON ESAS 600 TONELADAS (corregido 2026-08-05): son de DISTRIBUCIÓN, en
 // DOS TRAMOS DE 300 ton a TARIFA distinta ($15.099 y $37.800). NO son "300
 // cargue + 300 descargue", como afirmaba antes este comentario. La fuente es
-// `scripts/create_cargos_fijos_proyecto.sql:52-57`, donde las dos filas se
+// `scripts/111_create_cargos_fijos_proyecto.sql:52-57`, donde las dos filas se
 // llaman literalmente "Distribución fija — tramo 1/2"; su encabezado explica
 // que son la contrapartida de facturación del puesto "Distribución Turno".
 // (Tampoco tienen que ver con `montacargas_alquiler`, que es otro concepto:

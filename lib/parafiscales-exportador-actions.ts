@@ -227,7 +227,7 @@ export async function generarArchivoCargaPila(
     // excluye el día de cierre de la quincena y funde el Ajuste Nómina
     // Anterior -- lógica que este archivo no debe duplicar NUNCA: un solo
     // punto de cálculo para el mismo número). `archivoplano.anio` es NUEVO
-    // (scripts/archivoplano_reemplazo.sql, columna agregada el mismo día)
+    // (scripts/059_archivoplano_reemplazo.sql, columna agregada el mismo día)
     // para poder filtrar el mes sin mezclar años distintos.
     const identificaciones = Array.from(info.values()).map((i) => i.identificacion).filter(Boolean)
     const bonoRealPorCedulaQuincena = new Map<string, number>()
@@ -241,12 +241,12 @@ export async function generarArchivoCargaPila(
         .eq("tiponovedad", "Valor")
         .or("nombrenovedad.ilike.%Por Productividad%,nombrenovedad.ilike.%Ajuste Toneladas%")
       // Fallar RUIDOSO si la columna `anio` todavía no existe (falta correr
-      // scripts/archivoplano_reemplazo.sql en Supabase) -- nunca generar un
+      // scripts/059_archivoplano_reemplazo.sql en Supabase) -- nunca generar un
       // archivo plano con bono $0 para todo el mundo en silencio.
       if (bonoErr) {
         return {
           success: false,
-          message: `No se pudo leer el bono real de archivoplano (${bonoErr.message}). Probablemente falta correr scripts/archivoplano_reemplazo.sql en Supabase.`,
+          message: `No se pudo leer el bono real de archivoplano (${bonoErr.message}). Probablemente falta correr scripts/059_archivoplano_reemplazo.sql en Supabase.`,
         }
       }
       for (const b of bonoRows || []) {
@@ -310,7 +310,7 @@ export async function generarArchivoCargaPila(
             segmentos.push(segmentoTrab)
           }
           // El día 31 NO cuenta ni como día ni como valor (mes de 30 días,
-          // ver pagonomina_reemplazo.sql) -- BUG REAL corregido 2026-09-11:
+          // ver 053_pagonomina_reemplazo.sql) -- BUG REAL corregido 2026-09-11:
           // antes sí se sumaba su `total_liquidado_dia`, algo inofensivo
           // cuando ese día pagaba $0 base (regla vieja, hasta 2026-08-30),
           // pero desde el 2026-08-31 pagonomina le paga BASE COMPLETA (un
@@ -491,6 +491,6 @@ export async function generarArchivoCargaPila(
 
 // La ficha PILA separada (`parafiscales_estatico`, editada desde un diálogo
 // en Parafiscales) se retiró 2026-09-11: esos datos ahora se capturan en
-// Head Count al contratar (ver scripts/add_pila_fields_headcount.sql y el
+// Head Count al contratar (ver scripts/170_add_pila_fields_headcount.sql y el
 // formulario de components/headcount-management.tsx). La tabla vieja NO se
 // borró (queda de respaldo histórico), pero ya nada la lee ni la escribe.

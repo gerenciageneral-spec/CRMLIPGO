@@ -18,7 +18,7 @@
  *     porque la fuente es distinta (en Avimol la tolva vive en `invtrans`).
  *
  * CICLO DE VIDA: comparte la tabla `prefacturas` con el Cuadro de Control,
- * discriminada por `origen = 'produccion'` (ver scripts/add_prefactura_produccion.sql).
+ * discriminada por `origen = 'produccion'` (ver scripts/100_add_prefactura_produccion.sql).
  * Se reutiliza porque el ciclo borrador -> aprobada y el soporte congelado son
  * idénticos; duplicar la tabla sería duplicar ese código.
  *

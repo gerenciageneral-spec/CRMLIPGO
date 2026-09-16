@@ -141,7 +141,7 @@ export default function IsoEvidenceDashboard() {
             variant: "destructive",
             title: "Datos guardados, pero el estado no",
             description:
-              "Ejecuta la migración scripts/add_iso_evidencia_columns.sql para habilitar el estado manual.",
+              "Ejecuta la migración scripts/013_add_iso_evidencia_columns.sql para habilitar el estado manual.",
           })
           setEditando(null)
           await cargar()

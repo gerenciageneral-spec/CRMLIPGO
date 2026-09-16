@@ -12,12 +12,12 @@
  *  - NO PRESTACIONAL: no cotiza a seguridad social (no entra al IBC de la
  *    PILA) ni sirve de base para cesantías/prima/vacaciones. Por eso NO se
  *    suma a `pagonomina.total_liquidado_dia` — ver el comentario del CTE
- *    `bonos_dia` en scripts/pagonomina_reemplazo.sql.
+ *    `bonos_dia` en scripts/053_pagonomina_reemplazo.sql.
  *  - REQUIERE APROBACIÓN: nace 'pendiente'; solo los 'aprobado' impactan
  *    nómina y archivo plano.
  *  - `tipo` (Operativo/Administrativo) es SOLO clasificación y reporte.
  *
- * Escribe en `bonos_nomina` (scripts/create_bonos_nomina.sql).
+ * Escribe en `bonos_nomina` (scripts/096_create_bonos_nomina.sql).
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"

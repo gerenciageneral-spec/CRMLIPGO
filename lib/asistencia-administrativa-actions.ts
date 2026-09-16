@@ -17,7 +17,7 @@
 // Por qué basta con escribir bien `registroasistencia`: el calendario de
 // `pagonomina` se construye sobre `lista_empleados` = DISTINCT nombre_auxiliar
 // (cabeceraoc) UNION DISTINCT registroasistencia.nombre (ver
-// scripts/pagonomina_reemplazo.sql, CTE `lista_empleados`). Quien no tenga
+// scripts/053_pagonomina_reemplazo.sql, CTE `lista_empleados`). Quien no tenga
 // NINGUNA fila en `registroasistencia` no existe para la vista -- no es que
 // sus días paguen $0, es que no entran al UNION. En cuanto tenga una sola
 // fila, pagonomina/archivoplano la calculan igual que a cualquier operativo,

@@ -2013,8 +2013,8 @@ Las vistas concentran el cálculo del negocio: nómina y facturación no se calc
 
 | Objeto | Qué hace | Script |
 |---|---|---|
-| `fn_sync_produccion_to_invtrans()` + `trg_produccion_after_insert` | Lleva a inventario, de forma automática, toda producción que entre a la tabla `produccion`, venga del sistema de planta o de LIPgo | `scripts/fix_trigger_produccion_fechaprod.sql` |
-| `calcular_y_asignar_horas_extras()` | Calcula las horas extra al registrar la asistencia, según jornada y tolerancia vigentes | `scripts/fn_calcular_y_asignar_horas_extras.sql` |
+| `fn_sync_produccion_to_invtrans()` + `trg_produccion_after_insert` | Lleva a inventario, de forma automática, toda producción que entre a la tabla `produccion`, venga del sistema de planta o de LIPgo | `scripts/125_fix_trigger_produccion_fechaprod.sql` |
+| `calcular_y_asignar_horas_extras()` | Calcula las horas extra al registrar la asistencia, según jornada y tolerancia vigentes | `scripts/049_fn_calcular_y_asignar_horas_extras.sql` |
 | Disparadores de auditoría | Registran cada INSERT, UPDATE y DELETE en la tabla `auditoria`, con el estado antes y después y los campos que cambiaron | `scripts/auditoria/03_fn.sql`, `04_attach.sql` |
 
 

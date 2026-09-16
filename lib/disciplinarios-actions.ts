@@ -212,7 +212,7 @@ export async function crearProcesoDisciplinario(
         .single()
       if (!error) { creado = data; break }
       if (faltaTabla(error.message)) {
-        return { success: false, message: "Falta correr scripts/add_procesos_disciplinarios.sql." }
+        return { success: false, message: "Falta correr scripts/179_add_procesos_disciplinarios.sql." }
       }
       // Choque del índice único: otro caso tomó ese radicado. Se reintenta.
       if (!String(error.message).includes("uq_disc_radicado") || intento === 1) {

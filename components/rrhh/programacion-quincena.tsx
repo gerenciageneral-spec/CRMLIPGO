@@ -262,7 +262,7 @@ export function ProgramacionQuincena() {
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4" />
-            Falta correr <code className="font-mono text-xs">scripts/add_programacion_turnos_quincena.sql</code>
+            Falta correr <code className="font-mono text-xs">scripts/176_add_programacion_turnos_quincena.sql</code>
           </p>
           <p className="mt-1 text-xs">
             Sin él no existen los turnos con nombre, los equipos ni la demanda por puesto. La grilla

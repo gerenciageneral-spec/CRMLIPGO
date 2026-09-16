@@ -480,7 +480,7 @@ export async function guardarTurnoDef(payload: {
       : await sb.from("turnos_definicion").insert(fila)
     if (error) {
       if (faltaTabla(error.message)) {
-        return { success: false, message: "Falta correr scripts/add_programacion_turnos_quincena.sql." }
+        return { success: false, message: "Falta correr scripts/176_add_programacion_turnos_quincena.sql." }
       }
       return { success: false, message: error.message }
     }
@@ -532,7 +532,7 @@ export async function guardarDemanda(payload: {
       : await sb.from("demanda_puesto").insert(fila)
     if (error) {
       if (faltaTabla(error.message)) {
-        return { success: false, message: "Falta correr scripts/add_programacion_turnos_quincena.sql." }
+        return { success: false, message: "Falta correr scripts/176_add_programacion_turnos_quincena.sql." }
       }
       return { success: false, message: error.message }
     }
@@ -569,7 +569,7 @@ export async function guardarEquipo(payload: {
       const { data, error } = await sb.from("equipos_trabajo").insert(fila).select("id").single()
       if (error) {
         if (faltaTabla(error.message)) {
-          return { success: false, message: "Falta correr scripts/add_programacion_turnos_quincena.sql." }
+          return { success: false, message: "Falta correr scripts/176_add_programacion_turnos_quincena.sql." }
         }
         return { success: false, message: error.message }
       }

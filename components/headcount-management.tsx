@@ -86,7 +86,7 @@ export default function HeadcountManagement() {
     admin: false,
     // Datos de Seguridad Social (PILA) -- capturados aquí, al contratar,
     // en vez de en una ficha aparte que nadie llenaba (ver
-    // scripts/add_pila_fields_headcount.sql). Los lee el exportador PILA.
+    // scripts/170_add_pila_fields_headcount.sql). Los lee el exportador PILA.
     ciudad: "",
     administradora_pension: "",
     administradora_salud: "",
@@ -822,7 +822,7 @@ export default function HeadcountManagement() {
             {/* Datos de Seguridad Social (PILA): se capturan aquí, al
                 contratar, porque es la única fuente que lee el exportador
                 del archivo plano (lib/parafiscales-exportador-actions.ts) --
-                ver scripts/add_pila_fields_headcount.sql. */}
+                ver scripts/170_add_pila_fields_headcount.sql. */}
             <div className="space-y-3 rounded-md border p-3">
               <p className="text-sm font-medium">Seguridad Social (PILA)</p>
 

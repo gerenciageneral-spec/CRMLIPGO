@@ -500,7 +500,7 @@ export const groups: Group[] = [
           { name: "Equipos y Mantenimiento", icon: Settings, label: "Equipos y Mantenimiento" },
           // Va junto al preoperacional (que alimenta su hoja de vida) y a
           // Equipos y Mantenimiento, con el que comparte sst_equipos y
-          // sst_mantenimientos. Ver scripts/create_gestion_montacargas.sql.
+          // sst_mantenimientos. Ver scripts/104_create_gestion_montacargas.sql.
           { name: "Gestión de Montacargas", icon: Forklift, label: "Gestión de Montacargas" },
           { name: "Entrega de EPP", icon: ShieldCheck, label: "Entrega de EPP" },
           { name: "Gestión de Dotación EPP", icon: Package, label: "Dotación de EPP" },

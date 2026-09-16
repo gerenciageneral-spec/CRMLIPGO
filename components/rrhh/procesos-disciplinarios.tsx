@@ -224,7 +224,7 @@ export default function ProcesosDisciplinarios() {
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4" />
-            Falta correr <code className="font-mono text-xs">scripts/add_procesos_disciplinarios.sql</code>
+            Falta correr <code className="font-mono text-xs">scripts/179_add_procesos_disciplinarios.sql</code>
           </p>
           <p className="mt-1 text-xs">Sin él no se pueden radicar casos.</p>
         </div>

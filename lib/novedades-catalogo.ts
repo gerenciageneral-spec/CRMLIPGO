@@ -6,7 +6,7 @@
 //                            adelante: "13- Incapacidad...", "31- Vacaciones...")
 //  · `categoria`           — de categoriaDeNovedad() en lib/ausentismo-categorias
 //  · `pagaElDia`           — de la rama `valor_base_final` de pagonomina
-//                            (scripts/pagonomina_reemplazo.sql:635-637)
+//                            (scripts/053_pagonomina_reemplazo.sql:635-637)
 //  · `bloqueaDominical`    — de `bloquea_domingo` (mismo archivo, :290-301)
 //  · `esFaltaPenalizable`  — de `es_falta_penalizable` (:285-289)
 //

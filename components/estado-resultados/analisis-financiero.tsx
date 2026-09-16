@@ -643,7 +643,7 @@ export default function AnalisisFinanciero({ data, isLoading, error, periodoLabe
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No hay acuerdos de volúmenes configurados para este alcance.
             <br />
-            Corre <code className="text-xs">scripts/create_acuerdo_volumenes.sql</code> para cargar los cuadros por proyecto.
+            Corre <code className="text-xs">scripts/113_create_acuerdo_volumenes.sql</code> para cargar los cuadros por proyecto.
           </CardContent>
         </Card>
       ) : (

@@ -29,7 +29,7 @@
 //   · "Operadores auxiliares": no corresponde a ningún puesto conocido.
 //
 // El histórico se normalizó en la base el 2026-08-01
-// (scripts/normalizar_puestos_solicitudesturnos.sql). Esta tabla se mantiene
+// (scripts/102_normalizar_puestos_solicitudesturnos.sql). Esta tabla se mantiene
 // alineada con ese script y sigue cubriendo lo que se capture de aquí en
 // adelante, porque el campo aún admite texto libre.
 

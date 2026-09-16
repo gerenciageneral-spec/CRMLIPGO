@@ -24,7 +24,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
  *
  * Con la URL firmada el archivo va del navegador a Supabase sin pasar por la
  * función, así que el único tope que queda es el del bucket
- * (`storage.buckets.file_size_limit`, ver scripts/verificar_bucket_archivos.sql).
+ * (`storage.buckets.file_size_limit`, ver scripts/135_verificar_bucket_archivos.sql).
  * La clave de servicio nunca sale del servidor: solo se emite un permiso de
  * subida acotado a esa ruta.
  *

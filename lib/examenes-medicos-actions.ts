@@ -19,7 +19,7 @@ export interface ExamenMedico {
   archivo_url: string
   archivo_nombre: string
   created_at: string
-  // Aptitud, costo y trazabilidad (ver scripts/create_examenes_aptitud.sql).
+  // Aptitud, costo y trazabilidad (ver scripts/043_create_examenes_aptitud.sql).
   apto: boolean | null // null=pendiente · true=apto · false=no apto
   costo: number | null
   promovido: boolean | null

@@ -2,7 +2,7 @@
 
 // Server actions del cuadro de mando de nómina: lee/guarda los parámetros legales
 // por año en parametros_legales_anio (misma tabla que usa SST/ausentismos; ver
-// scripts/extend_parametros_nomina.sql). Usa service role, patrón de tarifas-actions.
+// scripts/051_extend_parametros_nomina.sql). Usa service role, patrón de tarifas-actions.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { PARAMS_NOMINA_DEFAULTS, type ParametrosNomina, type VigenciaParametros } from "@/lib/parametros-nomina"

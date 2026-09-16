@@ -225,7 +225,7 @@ export interface UserPermissions {
   sst_comunicacion: boolean
   sst_gestion_cambio: boolean
   sst_actividades: boolean
-  // Nuevas (creadas por scripts/add_permisos_certificaciones_gh.sql)
+  // Nuevas (creadas por scripts/016_add_permisos_certificaciones_gh.sql)
   sst_repositorio_soportes: boolean
   sst_alertas_at: boolean
   sst_investigaciones: boolean
@@ -321,7 +321,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Gestión de Contratos": "gestion_contratos",
   // Examenes Médicos: parte de SST, con permiso PROPIO (`examenes_medicos`)
   // para poder otorgarlo por separado en Gestión de Usuarios. Se puebla desde
-  // sst_autoevaluacion (ver scripts/add_examenes_medicos_permission.sql) para
+  // sst_autoevaluacion (ver scripts/063_add_examenes_medicos_permission.sql) para
   // no quitarle el acceso a quien ya audita la matriz 0312.
   "Examenes Médicos": "examenes_medicos",
   "Gestión de Dotación EPP": "dotacion_epp",
@@ -465,7 +465,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   // Permiso propio (2026-09-01): antes compartia `auditoria_inventario` con
   // Panel LIP Inventario y Auditoría de Inventario (ambos de solo lectura) --
   // Cuadre es el UNICO que ajusta stock real al cerrar el mes, y compartir la
-  // llave impedia otorgarlo por separado. Ver scripts/add_cuadre_inventario_permission.sql.
+  // llave impedia otorgarlo por separado. Ver scripts/154_add_cuadre_inventario_permission.sql.
   "Cuadre de Inventario": "cuadre_inventario",
   "Panel LIP Gestión Humana": "sig_matriz",
   // ISO 14001 (Ambiental)

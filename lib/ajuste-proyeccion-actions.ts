@@ -41,7 +41,7 @@ import {
 
 const num = (v: any) => Number(v || 0)
 
-/** Réplica de `peso_base_calculo` de pagonomina_reemplazo.sql. */
+/** Réplica de `peso_base_calculo` de 053_pagonomina_reemplazo.sql. */
 function pesoBaseCalculo(idempresa: number, tipooperacion: string, pesovascula: number, pesoorden: number): number {
   const cedis = idempresa === 3 || idempresa === 4
   if (cedis && tipooperacion === "Descargue") {
@@ -63,7 +63,7 @@ function pesoBaseCalculo(idempresa: number, tipooperacion: string, pesovascula: 
  * sin esta exclusión esas personas cobrarían su tonelaje de Cargue Y OTRA VEZ
  * el de la Distribución clon (doble conteo). Ya está cubierta aparte por las
  * 300 t fijas de facturación (lib/cargos-fijos-actions.ts) — concepto de
- * FACTURACIÓN, no de nómina. Mismo criterio que scripts/pagonomina_reemplazo.sql
+ * FACTURACIÓN, no de nómina. Mismo criterio que scripts/053_pagonomina_reemplazo.sql
  * (CTE `transformacion`); si se toca uno, tocar el otro.
  */
 function excluirAvimolDistribucion(idempresa: number, tipooperacion: string): boolean {
@@ -297,11 +297,11 @@ export async function getCruceProyeccion(
 /**
  * Piso de vigencia del modelo de día pleno: antes de esta fecha, el día de
  * cierre TODAVÍA manda su excedente de destajo dentro de la MISMA quincena
- * (archivoplano no lo excluye todavía — ver scripts/archivoplano_reemplazo.sql,
+ * (archivoplano no lo excluye todavía — ver scripts/059_archivoplano_reemplazo.sql,
  * "EXCLUIR EL DÍA DE CIERRE"). Generar un ajuste diferido para un día anterior
  * a este piso pagaría esa diferencia DOS VECES: una de una vez (novedad 52 de
  * esa quincena) y otra fundida en el 52- de la quincena siguiente (ver
- * `ajustes_aplicables` en archivoplano_reemplazo.sql). No mover sin correr
+ * `ajustes_aplicables` en 059_archivoplano_reemplazo.sql). No mover sin correr
  * antes esa migración Y confirmar que ya está desplegada.
  */
 const PISO_VIGENCIA_DIA_PLENO = "2026-08-15"

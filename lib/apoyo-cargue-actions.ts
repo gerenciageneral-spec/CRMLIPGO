@@ -15,7 +15,7 @@
  * `tarifaspersonal`), mismo patrón que lib/ajuste-proyeccion-actions.ts.
  *
  * Cada persona agregada desde aquí queda registrada en
- * `apoyo_cargue_asignaciones` (scripts/add_apoyo_cargue.sql) — es el rastro
+ * `apoyo_cargue_asignaciones` (scripts/127_add_apoyo_cargue.sql) — es el rastro
  * que usa la vista `pagonomina` para permitirle el bono de toneladas a un
  * especialidad=true SOLO ese día/orden, sin relajar la regla en general.
  */
@@ -27,7 +27,7 @@ import { getColombiaDateTime } from "@/lib/date-utils"
 
 const num = (v: any) => Number(v || 0)
 
-/** Réplica de `peso_base_calculo` de pagonomina_reemplazo.sql (líneas 85-87). */
+/** Réplica de `peso_base_calculo` de 053_pagonomina_reemplazo.sql (líneas 85-87). */
 function pesoBaseCalculo(idempresa: number, tipooperacion: string, pesovascula: number, pesoorden: number): number {
   const cedis = idempresa === 3 || idempresa === 4
   if (cedis && tipooperacion === "Descargue") {

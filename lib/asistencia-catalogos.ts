@@ -7,7 +7,7 @@
 // nómina/PILA que Licencia no remunerada -- la ley las agrupa bajo el mismo
 // código PILA "SLN"), pero es un texto distinto para dejar auditable CUÁL de
 // las dos ocurrió. `clasificarDiaCotizacion` (lib/parafiscales.ts) y las
-// vistas `pagonomina`/`vistas_financieras.sql` tratan ambos textos igual.
+// vistas `pagonomina`/`050_vistas_financieras.sql` tratan ambos textos igual.
 export const NOVEDADES_DIA = [
   "38- Licencia no remunerada- Deducción",
   "38- Suspensión temporal de Contrato- Deducción",
