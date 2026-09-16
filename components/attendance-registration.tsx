@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, XCircle, Loader2, LogIn, LogOut, Clock } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
+import { MarcacionesDelDia } from "@/components/marcaciones-del-dia"
 import { cn } from "@/lib/utils"
 
 // Formateadores Intl creados UNA vez fuera del componente: son objetos
@@ -366,7 +367,15 @@ export default function AttendanceRegistration() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-muted/30 px-4 py-6 sm:py-10">
-      <div className="container max-w-3xl mx-auto space-y-5">
+      {/* Dos columnas en pantalla ancha: a la izquierda lo que está pasando
+          hoy, a la derecha el kiosco. En una tablet de portería --pantalla
+          angosta-- se apilan y el kiosco queda primero, que es lo que ahí se
+          usa. */}
+      <div className="mx-auto flex max-w-[1500px] flex-col-reverse items-start gap-5 xl:flex-row">
+        <div className="w-full min-w-0 xl:flex-1">
+          <MarcacionesDelDia />
+        </div>
+        <div className="w-full space-y-5 xl:max-w-2xl">
         {/* Reloj en vivo: dominante, ocupa la franja superior. La hora
             mantiene tipografia mono y tabular-nums para que los digitos
             no "salten" cada segundo. */}
@@ -642,6 +651,7 @@ export default function AttendanceRegistration() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )
