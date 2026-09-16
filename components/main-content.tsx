@@ -101,7 +101,9 @@ import GestionContratos from "@/components/rrhh/gestion-contratos"
 import DotacionEPP from "@/components/rrhh/dotacion-epp"
 import Capacitaciones from "@/components/rrhh/capacitaciones"
 import CapacitacionesAsistencia from "@/components/rrhh/capacitaciones-asistencia"
-import SolicitudDePersonal from "@/components/rrhh/solicitud-de-personal"
+// Reconstruido: requisicion con causal legal del Art. 77 Ley 50/1990 y costo
+// mensual estimado con los porcentajes reales de prestaciones y parafiscales.
+import RequisicionPersonal from "@/components/rrhh/requisicion-personal"
 import EvaluacionesDashboard from "@/components/rrhh/evaluaciones-dashboard"
 import InduccionesEvidenciaDashboard from "@/components/rrhh/inducciones-evidencia-dashboard"
 import InduccionesManagement from "@/components/rrhh/inducciones-management"
@@ -667,7 +669,7 @@ export function MainContent({
             </PermissionGuard>
 ) : selectedModule === "Solicitud de Personal" ? (
 <PermissionGuard moduleName="Solicitud de Personal">
-  <SolicitudDePersonal />
+  <RequisicionPersonal />
   </PermissionGuard>
 ) : selectedModule === "Evaluaciones de Desempeño" ? (
   <PermissionGuard moduleName="Evaluaciones de Desempeño">
