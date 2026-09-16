@@ -78,7 +78,9 @@ import { ApoyoCargue } from "@/components/apoyo-cargue" // Added import for apoy
 import PersonnelNotices from "@/components/personnel-notices" // Added import for personnel notices module
 import AsistenciaAdministrativa from "@/components/rrhh/asistencia-administrativa"
 import GestionTurnos from "@/components/rrhh/gestion-turnos" // CRUD de turnos (tabla tarifasturnos)
-import ProgramacionTurnos from "@/components/rrhh/programacion-turnos" // Programación a futuro de personal en `registroasistencia`
+// Envoltorio con dos pestañas: la programación diaria de siempre (la que
+// escribe los turnos) y la vista de quincena (cobertura, equipos, grilla).
+import ProgramacionPersonal from "@/components/rrhh/programacion-personal"
 import NotificacionesPersonal from "@/components/rrhh/notificaciones-personal" // Envío de alertas/turnos por WhatsApp al celular del personal
 import { ViewPicking } from "@/components/view-picking" // Added import for ViewPicking component
 import { Tarifas } from "@/components/configuration/tarifas" // Added import for Tarifas component
@@ -1034,7 +1036,7 @@ export function MainContent({
             </PermissionGuard>
           ) : selectedModule === "Programación de turnos" ? (
             <PermissionGuard moduleName="Programación de turnos">
-              <ProgramacionTurnos />
+              <ProgramacionPersonal />
             </PermissionGuard>
           ) : selectedModule === "Notificaciones al Personal" ? (
             <PermissionGuard moduleName="Notificaciones al Personal">
