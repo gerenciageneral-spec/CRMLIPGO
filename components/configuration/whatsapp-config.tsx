@@ -62,6 +62,11 @@ export default function WhatsappConfig() {
   // Prueba
   const [telefono, setTelefono] = useState("")
   const [plantillaSel, setPlantillaSel] = useState("")
+  // Idioma con el que se ENVIA. Arranca del registrado en LIPgo, pero se puede
+  // corregir: Meta trata "es" y "es_CO" como idiomas DISTINTOS y rechaza el
+  // envio con un error que dice "template name does not exist in es", como si
+  // faltara la plantilla.
+  const [idiomaEnvio, setIdiomaEnvio] = useState("")
   const [valores, setValores] = useState<Record<string, string>>({})
 
   const cargar = useCallback(async () => {
@@ -84,7 +89,15 @@ export default function WhatsappConfig() {
     // el resto de la pantalla.
     if (e.configurado) {
       const meta = await getPlantillasDeMeta()
-      if (meta.success && meta.data) setEnMeta(meta.data)
+      if (meta.success && meta.data) {
+        setEnMeta(meta.data)
+        // Si el idioma todavia no se ha tocado, se toma el de Meta.
+        setIdiomaEnvio((actual) => {
+          if (actual) return actual
+          const nombre = plantillaSel || (p.success && p.data?.[0]?.nombre) || ""
+          return meta.data!.find((t) => t.nombre === nombre)?.idioma ?? "es"
+        })
+      }
     }
   }, [selectedEmpresaId, plantillaSel])
 
@@ -94,7 +107,14 @@ export default function WhatsappConfig() {
   }, [selectedEmpresaId])
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel)
-  const estadoEnMeta = enMeta.find((t) => t.nombre === plantillaSel)
+  // Todas las versiones de esa plantilla en Meta: la MISMA plantilla puede
+  // existir en varios idiomas, y solo sirve la del idioma que se envia.
+  const versionesEnMeta = enMeta.filter((t) => t.nombre === plantillaSel)
+  const estadoEnMeta =
+    versionesEnMeta.find((t) => t.idioma === idiomaEnvio) ?? versionesEnMeta[0] ?? null
+  // El envio pide un idioma que Meta no tiene para esa plantilla.
+  const idiomaNoCoincide =
+    versionesEnMeta.length > 0 && !versionesEnMeta.some((t) => t.idioma === idiomaEnvio)
 
   async function probar() {
     if (!telefono.trim() || !plantilla) return
@@ -105,7 +125,7 @@ export default function WhatsappConfig() {
       empresaId: selectedEmpresaId ?? null,
       telefono: telefono.trim(),
       plantilla: plantilla.nombre,
-      idioma: plantilla.idioma,
+      idioma: idiomaEnvio || plantilla.idioma,
       header,
       body,
       origen: "prueba",
@@ -266,8 +286,14 @@ export default function WhatsappConfig() {
               <select
                 value={plantillaSel}
                 onChange={(e) => {
-                  setPlantillaSel(e.target.value)
+                  const nombre = e.target.value
+                  setPlantillaSel(nombre)
                   setValores({})
+                  // El idioma bueno es el de META, no el registrado en LIPgo:
+                  // es el que decide si el envio funciona.
+                  const enM = enMeta.find((t) => t.nombre === nombre)
+                  const local = plantillas.find((p) => p.nombre === nombre)
+                  setIdiomaEnvio(enM?.idioma ?? local?.idioma ?? "es")
                 }}
                 className="mt-1 w-full rounded border bg-background px-2 py-1.5 text-sm"
               >
@@ -286,7 +312,8 @@ export default function WhatsappConfig() {
                   className="mt-1 text-[11px]"
                   style={{ color: estadoEnMeta.estado === "APPROVED" ? "#059669" : "#ea580c" }}
                 >
-                  En Meta: {estadoEnMeta.estado === "APPROVED" ? "aprobada" : estadoEnMeta.estado}
+                  En Meta: {estadoEnMeta.estado === "APPROVED" ? "aprobada" : estadoEnMeta.estado} ·
+                  idioma <strong>{estadoEnMeta.idioma}</strong>
                   {estadoEnMeta.estado !== "APPROVED" && " — todavía no se puede enviar"}
                 </p>
               ) : estado?.configurado && plantillaSel ? (
@@ -294,6 +321,43 @@ export default function WhatsappConfig() {
                   No aparece en Meta con ese nombre. Revisa que coincida exactamente.
                 </p>
               ) : null}
+
+              {/* El fallo mas comun y el que peor se explica: Meta trata "es" y
+                  "es_CO" como idiomas distintos, y su error dice "template name
+                  does not exist in es" -- como si faltara la plantilla. */}
+              {idiomaNoCoincide && (
+                <div className="mt-1.5 rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+                  <p className="font-medium">El idioma no coincide</p>
+                  <p className="mt-0.5">
+                    Vas a enviar en <strong>{idiomaEnvio}</strong> y en Meta esta plantilla existe
+                    en{" "}
+                    <strong>{versionesEnMeta.map((t) => t.idioma).join(", ")}</strong>. Meta los
+                    trata como idiomas distintos y rechaza el envío diciendo que la plantilla no
+                    existe.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1.5 h-6 text-[11px]"
+                    onClick={() => setIdiomaEnvio(versionesEnMeta[0].idioma)}
+                  >
+                    Usar {versionesEnMeta[0].idioma}
+                  </Button>
+                </div>
+              )}
+
+              <div className="mt-2">
+                <Label className="text-xs">Idioma del envío</Label>
+                <Input
+                  value={idiomaEnvio}
+                  onChange={(e) => setIdiomaEnvio(e.target.value)}
+                  placeholder="es_CO"
+                  className="mt-1 h-8 font-mono text-sm"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Debe coincidir exactamente con el de la plantilla aprobada en Meta.
+                </p>
+              </div>
             </div>
 
             {plantilla && (

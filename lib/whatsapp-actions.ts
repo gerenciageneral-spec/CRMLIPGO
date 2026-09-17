@@ -263,10 +263,18 @@ export async function enviarPlantilla(input: EnviarPlantillaInput): Promise<Resu
         // `error_data.details` trae el motivo real; `message` suele ser genérico.
         error_detalle: err.error_data?.details ?? err.message ?? `HTTP ${r.status}`,
       })
+      let msg = err.error_data?.details ?? err.message ?? `Meta respondió ${r.status}.`
+      // El error 132001 dice "template name does not exist in <idioma>", que se
+      // lee como si faltara la plantilla. Casi siempre existe pero en OTRO
+      // idioma: Meta trata "es" y "es_CO" como distintos. Se traduce para no
+      // mandar a nadie a buscar una plantilla que ya está creada.
+      if (String(err.code) === "132001") {
+        msg = `La plantilla "${input.plantilla}" no existe en el idioma "${input.idioma || "es"}". Suele estar aprobada en otro idioma (por ejemplo es_CO): revisa el idioma exacto en WhatsApp Manager y ajústalo. Detalle de Meta: ${msg}`
+      }
       return {
         success: false,
         codigo: String(err.code ?? r.status),
-        message: err.error_data?.details ?? err.message ?? `Meta respondió ${r.status}.`,
+        message: msg,
       }
     }
 
