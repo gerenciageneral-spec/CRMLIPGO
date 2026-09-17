@@ -416,7 +416,7 @@ export async function getParafiscales(
     // y funde el Ajuste Nómina Anterior). Mismo query que usa el exportador
     // PILA (lib/parafiscales-exportador-actions.ts) -- un solo punto de
     // cálculo para el mismo número. `archivoplano.anio` es columna nueva
-    // (scripts/archivoplano_reemplazo.sql) para no mezclar años al filtrar
+    // (scripts/059_archivoplano_reemplazo.sql) para no mezclar años al filtrar
     // por mes. Se respeta `BONO_DESTAJO_IBC_DESDE`: antes de esa fecha el
     // bono no entra al IBC aunque archivoplano sí lo tenga (decisión de
     // negocio ya confirmada, ver comentario de cabecera del archivo).
@@ -433,14 +433,14 @@ export async function getParafiscales(
           .eq("tiponovedad", "Valor")
           .or("nombrenovedad.ilike.%Por Productividad%,nombrenovedad.ilike.%Ajuste Toneladas%")
         // Fallar RUIDOSO si la columna `anio` todavía no existe (falta correr
-        // scripts/archivoplano_reemplazo.sql en Supabase) -- nunca seguir en
+        // scripts/059_archivoplano_reemplazo.sql en Supabase) -- nunca seguir en
         // silencio con bono $0 para todo el mundo, eso sería peor que el bug
         // que se está corrigiendo.
         if (bonoErr) {
           return {
             success: false,
             data: [],
-            message: `No se pudo leer el bono real de archivoplano (${bonoErr.message}). Probablemente falta correr scripts/archivoplano_reemplazo.sql en Supabase.`,
+            message: `No se pudo leer el bono real de archivoplano (${bonoErr.message}). Probablemente falta correr scripts/059_archivoplano_reemplazo.sql en Supabase.`,
           }
         }
         for (const b of bonoRows || []) {

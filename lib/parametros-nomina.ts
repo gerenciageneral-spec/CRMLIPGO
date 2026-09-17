@@ -1,7 +1,7 @@
 // Lógica PURA del cuadro de mando de nómina (sin "use server", sin I/O): tipos,
 // defaults y el cálculo de recargos/horas extra a partir del salario + auxilio y
 // los parámetros legales del año. Este mismo cálculo se replica en SQL dentro de
-// la vista pagonomina (ver scripts/vistas_financieras.sql, CTE calculo_turnos).
+// la vista pagonomina (ver scripts/050_vistas_financieras.sql, CTE calculo_turnos).
 //
 // Convenciones (confirmadas contra las vistas reales):
 //   - La base de los recargos/horas extra es el SALARIO (el auxilio de transporte

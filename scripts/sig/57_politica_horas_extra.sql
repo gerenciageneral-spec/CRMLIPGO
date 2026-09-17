@@ -9,7 +9,7 @@
 --
 -- Cada vez que un puesto necesita otra regla hay que editar la función y correr
 -- un script retroactivo. Ya pasó dos veces (fix_horas_extra_sabado_distribucion
--- _turno.sql y recalcular_horas_extra_retroactivo_16jul.sql), y la cabecera de
+-- _turno.sql y 092_recalcular_horas_extra_retroactivo_16jul.sql), y la cabecera de
 -- la propia función lo admite.
 --
 -- Este script mueve esa regla a DATOS, para poder configurarla desde la pestaña
@@ -269,7 +269,7 @@ comment on function public.resolver_politica_horas_extra(text, date) is
 -- Toda la aritmética del cálculo, en un solo lugar.
 --
 -- El recálculo retroactivo llama a ESTA función en vez de reimplementar la
--- fórmula en un CTE, como hace hoy recalcular_horas_extra_retroactivo_16jul.sql
+-- fórmula en un CTE, como hace hoy 092_recalcular_horas_extra_retroactivo_16jul.sql
 -- --que además quedó con `interval '30 minutes'` donde el trigger usa 45--.
 -- Es la prueba de por qué no hay que duplicarla.
 create or replace function public.calcular_extras_con_politica(
@@ -645,7 +645,7 @@ select 'Distribución Turno · lunes',
 -- pie sin efecto. La columna `extras_manual` puede quedarse: es inofensiva.
 --
 --   create or replace function public.calcular_y_asignar_horas_extras()
---   ... ver scripts/fn_calcular_y_asignar_horas_extras.sql en el commit anterior
+--   ... ver scripts/049_fn_calcular_y_asignar_horas_extras.sql en el commit anterior
 --
 -- Para revertir un recálculo retroactivo concreto:
 --

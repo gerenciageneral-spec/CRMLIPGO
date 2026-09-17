@@ -500,7 +500,7 @@ export interface PortalNovedadAsistencia {
 /**
  * Devuelve las novedades de asistencia del colaborador, filtrando por su
  * `identificacion` (no por id porque la tabla `registroasistencia` indexa
- * por cedula segun el schema en scripts/create_registroasistencia_table.sql).
+ * por cedula segun el schema en scripts/034_create_registroasistencia_table.sql).
  *
  * Filtramos `asistencia not null` y tambien excluimos strings vacios para que
  * el listado solo muestre filas que realmente tienen una novedad. Ordenamos

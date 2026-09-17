@@ -7,7 +7,7 @@ import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { useAuth } from "@/components/auth-provider"
 import { getParos, type ParoComentario } from "@/lib/paros-actions"
 import { getHorarioTolva, getHorarioTolvaPorFecha } from "@/lib/horario-tolva-actions"
-import { detectarParosEnVentana } from "@/lib/paros-produccion"
+import { detectarParosEnVentana, utcDateStr } from "@/lib/paros-produccion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Activity,
@@ -183,25 +183,10 @@ const PIE_COLORS = [
 // Fecha (YYYY-MM-DD) del dia actual en UTC. La usamos para el filtro
 // "hoy" porque mostramos la hora literal del timestamptz (en UTC), de
 // modo que el limite del dia coincida con los digitos que se ven.
-function utcDateStr() {
-  // OJO: el dia de "hoy" se toma en hora de COLOMBIA, no en UTC.
-  //
-  // Antes se formateaba en UTC y, a partir de las 19:00 hora de Colombia, ya era
-  // el dia siguiente en UTC: el filtro por defecto se ADELANTABA UN DIA y el
-  // tablero salia vacio el resto de la tarde-noche.
-  //
-  // No es contradictorio con el resto del modulo: los RANGOS de consulta si se
-  // arman con los digitos literales (…T00:00:00Z), porque `fecha_hora` guarda la
-  // hora de pared de Colombia etiquetada como UTC. Justamente por eso el limite
-  // del dia tiene que ser el dia calendario COLOMBIANO: asi los digitos del
-  // rango coinciden con los digitos almacenados.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date())
-}
+// `utcDateStr` ya NO se define aqui: vive en lib/paros-produccion.ts y se
+// importa arriba. Habia dos copias con criterios DISTINTOS --esta en hora de
+// Colombia, la otra en UTC-- y Reporte de Paros usaba la otra: despues de las
+// 19:00 los dos modulos creian estar en dias diferentes.
 
 // Dado un YYYY-MM-DD devuelve el dia siguiente en el mismo formato.
 // Lo usamos para construir el limite superior [desde, hasta) del filtro
@@ -915,16 +900,66 @@ function LiveTab() {
     return { comentadoStarts: starts, motivoPorStart: motivos }
   }, [parosComentados])
 
-  // Resumen de paros del turno: total vs comentados / sin comentar.
+  // Consolidado de paros del turno: cuantos son, cuantos estan justificados y
+  // --sobre todo-- CUANTOS MINUTOS pesa cada grupo.
+  //
+  // El conteo de paros solo no dice nada: veinte microparos de 2 min y un paro
+  // de 40 son "20 vs 1" pero pesan lo mismo. Lo que se responde ante gerencia
+  // es cuanto tiempo de maquina se perdio y que parte de ese tiempo nadie
+  // explico.
+  //
+  // "Sin justificar" = franja detectada por el contador que NO tiene un
+  // comentario con motivo en paros_produccion. Se cruza por `inicioISO`, que es
+  // la clave de la franja.
   const parosResumen = useMemo(() => {
     const ultimoInst = histRows.length ? parseTs(histRows[histRows.length - 1].fecha_hora).getTime() : null
     const nowMs = isToday ? ultimoInst ?? bogotaWallAsUtcMs(now) : msDelDia(ventana.hastaMin)
     const lista = detectarParosEnVentana(
       histRows, selectedDate, ventana.desdeMin, ventana.hastaMin, nowMs,
     )
+
     let comentados = 0
-    for (const p of lista) if (parosComentados[p.inicioISO]?.motivo) comentados++
-    return { total: lista.length, comentados, sinComentar: lista.length - comentados }
+    let minutosTotal = 0
+    let minutosComentados = 0
+    // Minutos justificados agrupados por categoria, para saber en que se va el
+    // tiempo y no solo cuanto se va.
+    const porCategoria = new Map<string, { minutos: number; conteo: number }>()
+    // El paro sin justificar mas largo: es el que primero hay que explicar.
+    let mayorSinJustificar: { inicio: string; fin: string; minutos: number } | null = null
+
+    for (const p of lista) {
+      minutosTotal += p.minutos
+      const c = parosComentados[p.inicioISO]
+      if (c?.motivo) {
+        comentados++
+        minutosComentados += p.minutos
+        const cat = (c.categoria || "Sin categoría").trim() || "Sin categoría"
+        const acc = porCategoria.get(cat) ?? { minutos: 0, conteo: 0 }
+        acc.minutos += p.minutos
+        acc.conteo++
+        porCategoria.set(cat, acc)
+      } else if (!mayorSinJustificar || p.minutos > mayorSinJustificar.minutos) {
+        mayorSinJustificar = { inicio: p.inicio, fin: p.fin, minutos: p.minutos }
+      }
+    }
+
+    const minutosSinJustificar = minutosTotal - minutosComentados
+    return {
+      total: lista.length,
+      comentados,
+      sinComentar: lista.length - comentados,
+      minutosTotal,
+      minutosComentados,
+      minutosSinJustificar,
+      // Cuanto del tiempo perdido quedo sin explicacion. Es el numero que
+      // importa: 200 minutos de paro con el 90% justificado es una operacion
+      // bajo control; con el 10%, no.
+      pctSinJustificar: minutosTotal > 0 ? Math.round((minutosSinJustificar / minutosTotal) * 100) : 0,
+      porCategoria: [...porCategoria.entries()]
+        .map(([categoria, v]) => ({ categoria, ...v }))
+        .sort((a, b) => b.minutos - a.minutos),
+      mayorSinJustificar,
+    }
   }, [histRows, now, isToday, selectedDate, msDelDia, ventana, parosComentados])
 
   // Velocidad de produccion: un punto por lectura de 2 min del contador, dentro
@@ -1423,12 +1458,124 @@ function LiveTab() {
           {parosResumen.total > 0 && (
             <span className="font-sans text-xs">
               <strong className="text-foreground">{parosResumen.total}</strong> paros ·{" "}
+              <strong className="text-foreground">{fmtMinutos(parosResumen.minutosTotal)}</strong> ·{" "}
               <strong className="text-chart-4">{parosResumen.comentados}</strong> justificados ·{" "}
               <strong className="text-destructive">{parosResumen.sinComentar}</strong> sin justificar
             </span>
           )}
           <span>{minutosAHora(ventana.hastaMin)}</span>
         </div>
+
+        {/* CONSOLIDADO DE PAROS
+            Los conteos solos engañan: veinte microparos de 2 min y un paro de
+            40 son "20 vs 1" pero cuestan lo mismo. Lo que se responde ante
+            gerencia es cuanto tiempo de maquina se perdio y que parte de ese
+            tiempo nadie explico. */}
+        {parosResumen.total > 0 && (
+          <div className="mt-3 border-t border-border pt-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Paro total
+                </p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                  {fmtMinutos(parosResumen.minutosTotal)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {parosResumen.total} {parosResumen.total === 1 ? "franja" : "franjas"}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Justificado
+                </p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums text-chart-4">
+                  {fmtMinutos(parosResumen.minutosComentados)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {parosResumen.comentados} con motivo
+                </p>
+              </div>
+
+              <div
+                className={`rounded-lg border p-2 ${
+                  parosResumen.minutosSinJustificar > 0
+                    ? "border-destructive/40 bg-destructive/5"
+                    : "border-border bg-muted/30"
+                }`}
+              >
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Sin justificar
+                </p>
+                <p
+                  className={`mt-0.5 text-lg font-semibold tabular-nums ${
+                    parosResumen.minutosSinJustificar > 0 ? "text-destructive" : "text-foreground"
+                  }`}
+                >
+                  {fmtMinutos(parosResumen.minutosSinJustificar)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {parosResumen.sinComentar} sin motivo
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  % sin explicar
+                </p>
+                <p
+                  className={`mt-0.5 text-lg font-semibold tabular-nums ${
+                    parosResumen.pctSinJustificar > 0 ? "text-destructive" : "text-chart-4"
+                  }`}
+                >
+                  {parosResumen.pctSinJustificar}%
+                </p>
+                <p className="text-[10px] text-muted-foreground">del tiempo parado</p>
+              </div>
+            </div>
+
+            {/* El paro sin justificar mas largo: por donde empezar a preguntar. */}
+            {parosResumen.mayorSinJustificar && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                El más largo sin justificar:{" "}
+                <strong className="text-destructive">
+                  {fmtMinutos(parosResumen.mayorSinJustificar.minutos)}
+                </strong>{" "}
+                entre {parosResumen.mayorSinJustificar.inicio} y{" "}
+                {parosResumen.mayorSinJustificar.fin}.
+              </p>
+            )}
+
+            {/* En que se va el tiempo que SI esta justificado. */}
+            {parosResumen.porCategoria.length > 0 && (
+              <div className="mt-2">
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Justificado por categoría
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {parosResumen.porCategoria.map((c) => (
+                    <span
+                      key={c.categoria}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[11px]"
+                      title={`${c.conteo} ${c.conteo === 1 ? "paro" : "paros"}`}
+                    >
+                      {c.categoria}
+                      <strong className="tabular-nums text-foreground">
+                        {fmtMinutos(c.minutos)}
+                      </strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Un paro es una franja de 2 minutos o más sin registro del contador, dentro del
+              horario de tolva. Se justifica desde «Reporte de Paros».
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Rendimiento dinamico (donut) + cumplimiento hora a hora */}

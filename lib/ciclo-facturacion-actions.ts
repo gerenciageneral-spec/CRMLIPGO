@@ -24,7 +24,7 @@
  *
  * Al CERRAR (marcarCierre) arranca la cartera/cobro: se calcula
  * `dias_plazo`/`fecha_vencimiento` según `condiciones_pago_owner`, y desde ahí
- * `registrarPago` lleva el saldo. Ver scripts/add_ciclo_facturacion.sql.
+ * `registrarPago` lleva el saldo. Ver scripts/165_add_ciclo_facturacion.sql.
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
@@ -756,7 +756,7 @@ export interface ResultadoGeneracionManual {
  * Atlántico) -- cada owner necesita su PROPIO anexo/firma/factura/cierre,
  * nunca mezclados en un solo documento. Por eso esta función arma UNA
  * prefactura POR OWNER (columna `owner` en `prefacturas`, ver
- * scripts/add_owner_prefacturas.sql), cada una con su propio período
+ * scripts/172_add_owner_prefacturas.sql), cada una con su propio período
  * contiguo independiente -- el owner A puede llevar facturado hasta el 5 y
  * el B hasta el 8, no tiene sentido compartir una sola fecha "desde".
  *

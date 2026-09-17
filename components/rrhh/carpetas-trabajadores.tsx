@@ -27,6 +27,9 @@ import {
   Download,
 } from "lucide-react"
 import { getEvidenciaInducciones, type IntentoInduccion } from "@/lib/inducciones-actions"
+import { getDisciplinariosDePersona } from "@/lib/disciplinarios-actions"
+import { estadoMeta } from "@/lib/disciplinarios-catalogo"
+import type { ProcesoDisciplinario } from "@/lib/disciplinarios-tipos"
 import { type HeadcountPerson } from "@/lib/headcount-actions"
 import { useAuth } from "@/components/auth-provider"
 import { cn } from "@/lib/utils"
@@ -80,7 +83,13 @@ export function CarpetasTrabajadores() {
   const [searchTerm, setSearchTerm] = useState("")
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
   // Subcarpeta abierta dentro del expediente del trabajador.
-  const [subAbierta, setSubAbierta] = useState<"base" | "inducciones" | null>("base")
+  const [subAbierta, setSubAbierta] = useState<
+    "base" | "inducciones" | "disciplinarios" | null
+  >("base")
+  // Procesos disciplinarios de la persona seleccionada. Van en subcarpeta y no
+  // como una columna mas de headcount porque una persona puede tener VARIOS
+  // casos, y una columna solo guardaria el ultimo.
+  const [disciplinarios, setDisciplinarios] = useState<ProcesoDisciplinario[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -167,6 +176,24 @@ export function CarpetasTrabajadores() {
   )
 
   // Documentos base disponibles (con URL) del trabajador seleccionado.
+  // Casos disciplinarios de la persona abierta. Se piden aparte --y no con el
+  // resto del expediente-- porque solo hacen falta cuando hay alguien
+  // seleccionado, y son muchos menos que el listado completo.
+  useEffect(() => {
+    const cedula = (carpetaActiva?.persona as any)?.identificacion
+    if (!cedula) {
+      setDisciplinarios([])
+      return
+    }
+    let vivo = true
+    getDisciplinariosDePersona(String(cedula)).then((r) => {
+      if (vivo) setDisciplinarios(r.success && r.data ? r.data : [])
+    })
+    return () => {
+      vivo = false
+    }
+  }, [carpetaActiva])
+
   const documentosBase = useMemo(() => {
     const p = carpetaActiva?.persona as Record<string, any> | null | undefined
     if (!p) return []
@@ -426,6 +453,95 @@ export function CarpetasTrabajadores() {
                           )}
                         </li>
                       ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Subcarpeta: Procesos disciplinarios.
+                Va como subcarpeta y no como una columna mas de headcount
+                porque una persona puede tener VARIOS casos: una columna solo
+                guardaria el ultimo y se perderia el historico, que es
+                justamente lo que un expediente laboral tiene que conservar. */}
+            <div className="rounded-lg border">
+              <button
+                type="button"
+                onClick={() =>
+                  setSubAbierta((s) => (s === "disciplinarios" ? null : "disciplinarios"))
+                }
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                    subAbierta === "disciplinarios" && "rotate-90",
+                  )}
+                />
+                {subAbierta === "disciplinarios" ? (
+                  <FolderOpen className="h-5 w-5 shrink-0 text-primary" />
+                ) : (
+                  <Folder className="h-5 w-5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="flex-1 font-medium">Procesos disciplinarios</span>
+                <Badge variant="outline" className="shrink-0">
+                  {disciplinarios.length}
+                </Badge>
+              </button>
+              {subAbierta === "disciplinarios" && (
+                <div className="border-t p-3">
+                  {disciplinarios.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      Este trabajador no tiene procesos disciplinarios.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {disciplinarios.map((c) => {
+                        const meta = estadoMeta(c.estado)
+                        return (
+                          <li
+                            key={c.id}
+                            className="flex flex-wrap items-center gap-3 rounded-lg border p-3"
+                          >
+                            <div className="rounded-lg bg-muted p-2">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-medium">{c.conducta}</p>
+                                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                                  {c.radicado}
+                                </code>
+                                <span
+                                  className="rounded px-1.5 py-0.5 text-[10px] text-white"
+                                  style={{ background: meta.color }}
+                                >
+                                  {meta.etiqueta}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <CalendarDays className="h-3.5 w-3.5" />
+                                  {formatFecha(c.fechaHecho)}
+                                </span>
+                                {c.medidaAplicada && <span>Medida: {c.medidaAplicada}</span>}
+                              </div>
+                            </div>
+                            {c.documentoUrl ? (
+                              <Button asChild size="sm" variant="outline" className="gap-1.5">
+                                <a href={c.documentoUrl} target="_blank" rel="noopener noreferrer">
+                                  <FileText className="h-3.5 w-3.5" />
+                                  Ver acta
+                                </a>
+                              </Button>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">
+                                Sin acta generada
+                              </Badge>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </div>

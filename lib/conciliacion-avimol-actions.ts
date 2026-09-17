@@ -827,7 +827,7 @@ export async function getConciliacionAvimol(
 
     // 4c) Alerta: gente con puesto de turno en asistencia que pagonomina NO
     //     liquidó como turno (falta tarifa de turno vigente — pagonomina hace
-    //     INNER JOIN a tarifasturnos, ver pagonomina_reemplazo.sql:158).
+    //     INNER JOIN a tarifasturnos, ver 053_pagonomina_reemplazo.sql:158).
     {
       const { data } = await admin
         .from("registroasistencia")

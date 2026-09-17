@@ -75,10 +75,14 @@ import AttendanceRegistration from "@/components/attendance-registration" // Add
 import AttendanceTable from "@/components/attendance-table" // Added import for attendance table
 import { ExtraHoursAssignment } from "@/components/extra-hours-assignment" // Added import for extra hours assignment module
 import { ApoyoCargue } from "@/components/apoyo-cargue" // Added import for apoyo en cargue module
-import PersonnelNotices from "@/components/personnel-notices" // Added import for personnel notices module
+// Reconstruido: reportar la novedad y ver su efecto en la quincena en una sola
+// pantalla, con el impacto en pesos tomado de la vista que liquida.
+import NovedadesTiempoReal from "@/components/rrhh/novedades-tiempo-real" // Added import for personnel notices module
 import AsistenciaAdministrativa from "@/components/rrhh/asistencia-administrativa"
 import GestionTurnos from "@/components/rrhh/gestion-turnos" // CRUD de turnos (tabla tarifasturnos)
-import ProgramacionTurnos from "@/components/rrhh/programacion-turnos" // Programación a futuro de personal en `registroasistencia`
+// Envoltorio con dos pestañas: la programación diaria de siempre (la que
+// escribe los turnos) y la vista de quincena (cobertura, equipos, grilla).
+import ProgramacionPersonal from "@/components/rrhh/programacion-personal"
 import NotificacionesPersonal from "@/components/rrhh/notificaciones-personal" // Envío de alertas/turnos por WhatsApp al celular del personal
 import { ViewPicking } from "@/components/view-picking" // Added import for ViewPicking component
 import { Tarifas } from "@/components/configuration/tarifas" // Added import for Tarifas component
@@ -97,7 +101,10 @@ import GestionContratos from "@/components/rrhh/gestion-contratos"
 import DotacionEPP from "@/components/rrhh/dotacion-epp"
 import Capacitaciones from "@/components/rrhh/capacitaciones"
 import CapacitacionesAsistencia from "@/components/rrhh/capacitaciones-asistencia"
-import SolicitudDePersonal from "@/components/rrhh/solicitud-de-personal"
+// Reconstruido: requisicion con causal legal del Art. 77 Ley 50/1990 y costo
+// mensual estimado con los porcentajes reales de prestaciones y parafiscales.
+import RequisicionPersonal from "@/components/rrhh/requisicion-personal"
+import ProcesosDisciplinarios from "@/components/rrhh/procesos-disciplinarios"
 import EvaluacionesDashboard from "@/components/rrhh/evaluaciones-dashboard"
 import InduccionesEvidenciaDashboard from "@/components/rrhh/inducciones-evidencia-dashboard"
 import InduccionesManagement from "@/components/rrhh/inducciones-management"
@@ -140,6 +147,7 @@ import { EvaluacionAreas } from "@/components/sst/evaluacion-areas"
 import { PanelOperacionLIP } from "@/components/sst/panel-operacion-lip"
 import ControlToneladas from "@/components/control-toneladas"
 import CentroCoordinacion from "@/components/centro-coordinacion"
+import { OperacionDelDia } from "@/components/operacion/operacion-del-dia"
 import { MapaInteraccionProceso } from "@/components/sst/mapa-interaccion-proceso"
 import { MapaProcesos } from "@/components/sig/mapa-procesos"
 import { PanelInventarioLIP } from "@/components/sst/panel-inventario-lip"
@@ -302,6 +310,7 @@ export function MainContent({
       "Gestión de Dotación EPP": "dotacion_epp",
       "Gestión de Capacitaciones": "capacitaciones",
       "Asistencia a Capacitaciones": "asistencia_capacitaciones",
+      "Operación del día": "operacion_dia",
       "Solicitud de Personal": "solicitud_personal",
       "Evaluaciones de Desempeño": "evaluacionpersonal",
       "Gestión de Solicitudes": "gestionsolicitudes",
@@ -661,7 +670,7 @@ export function MainContent({
             </PermissionGuard>
 ) : selectedModule === "Solicitud de Personal" ? (
 <PermissionGuard moduleName="Solicitud de Personal">
-  <SolicitudDePersonal />
+  <RequisicionPersonal />
   </PermissionGuard>
 ) : selectedModule === "Evaluaciones de Desempeño" ? (
   <PermissionGuard moduleName="Evaluaciones de Desempeño">
@@ -694,6 +703,10 @@ export function MainContent({
 ) : selectedModule === "Gestión de Colaboradores" ? (
   <PermissionGuard moduleName="Gestión de Colaboradores">
     <GestionColaboradores />
+  </PermissionGuard>
+) : selectedModule === "Procesos Disciplinarios" ? (
+  <PermissionGuard moduleName="Procesos Disciplinarios">
+    <ProcesosDisciplinarios />
   </PermissionGuard>
 ) : selectedModule === "Carpetas de Trabajadores" ? (
   <PermissionGuard moduleName="Carpetas de Trabajadores">
@@ -849,7 +862,7 @@ export function MainContent({
             </PermissionGuard>
           ) : selectedModule === "Novedades de personal" ? (
             <PermissionGuard moduleName="Novedades de personal">
-              <PersonnelNotices />
+              <NovedadesTiempoReal />
             </PermissionGuard>
           ) : selectedModule === "Asistencia Administrativa" ? (
             <PermissionGuard moduleName="Asistencia Administrativa">
@@ -986,6 +999,10 @@ export function MainContent({
             <PermissionGuard moduleName="Control de Toneladas">
               <ControlToneladas />
             </PermissionGuard>
+          ) : selectedModule === "Operación del día" ? (
+            <PermissionGuard moduleName="Operación del día">
+              <OperacionDelDia />
+            </PermissionGuard>
           ) : selectedModule === "Centro de Coordinación" ? (
             <PermissionGuard moduleName="Centro de Coordinación">
               <CentroCoordinacion onNavigate={onNavigateModule} />
@@ -1028,7 +1045,7 @@ export function MainContent({
             </PermissionGuard>
           ) : selectedModule === "Programación de turnos" ? (
             <PermissionGuard moduleName="Programación de turnos">
-              <ProgramacionTurnos />
+              <ProgramacionPersonal />
             </PermissionGuard>
           ) : selectedModule === "Notificaciones al Personal" ? (
             <PermissionGuard moduleName="Notificaciones al Personal">

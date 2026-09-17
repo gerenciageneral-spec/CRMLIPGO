@@ -428,7 +428,7 @@ export async function getDashboardRecepcionData(
         .lte("fechacargue", fechaFin)
         // "proyeccion" excluido (2026-09-08): residuo de un módulo manual
         // descontinuado en jul-2026, nunca fue tonelaje real (ver
-        // scripts/pagonomina_reemplazo.sql) -- sin esto inflaba el volumen y
+        // scripts/053_pagonomina_reemplazo.sql) -- sin esto inflaba el volumen y
         // los conteos de órdenes de ID3/ID4 en este dashboard.
         .neq("tipooperacion", "proyeccion")
         // "Tolva"/"Tolva f" excluido (2026-09-15): es PRODUCCIÓN reclasificada

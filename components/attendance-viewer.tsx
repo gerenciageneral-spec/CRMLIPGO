@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input"
 import { DatePickerField } from "@/components/ui/date-picker-field"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, Search, Pencil, LayoutDashboard, CalendarDays, TableProperties, MapPin } from "lucide-react"
+import { Loader2, Search, Pencil, LayoutDashboard, CalendarDays, TableProperties, MapPin, Activity } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { createClient } from "@/lib/supabase-client"
 import { fetchAllRows } from "@/lib/fetch-all-rows"
 import { AttendanceDailyDashboard } from "@/components/attendance-daily-dashboard"
 import { AttendanceHistoricalDashboard } from "@/components/attendance-historical-dashboard"
 import VisorUbicaciones from "@/components/visor-ubicaciones"
+import { IndicadoresAusentismo } from "@/components/attendance/indicadores-ausentismo"
 import { EditNovedadDialog, type RegistroParaEditarNovedad } from "@/components/attendance/edit-novedad-dialog"
 import { categoriaDeNovedad } from "@/lib/ausentismo-categorias"
 import { getPersonasAsistenciaAdministrativa } from "@/lib/asistencia-administrativa-actions"
@@ -47,7 +48,9 @@ export function AttendanceViewer() {
   const [loading, setLoading] = useState(true)
   const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([])
   const [editing, setEditing] = useState<RegistroParaEditarNovedad | null>(null)
-  const [activeView, setActiveView] = useState<"table" | "daily" | "historical" | "tracking">("table")
+  const [activeView, setActiveView] = useState<
+    "table" | "daily" | "historical" | "tracking" | "ausentismo"
+  >("table")
   
   // Filters
   const [filterStartDate, setFilterStartDate] = useState("")
@@ -228,12 +231,22 @@ export function AttendanceViewer() {
           <MapPin className="h-4 w-4" />
           Seguimiento a Conexiones
         </Button>
+        <Button
+          variant={activeView === "ausentismo" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setActiveView("ausentismo")}
+          className="gap-2"
+        >
+          <Activity className="h-4 w-4" />
+          Indicadores de Ausentismo
+        </Button>
       </div>
 
       {/* Dashboard Views */}
       {activeView === "daily" && <AttendanceDailyDashboard />}
       {activeView === "historical" && <AttendanceHistoricalDashboard />}
       {activeView === "tracking" && <VisorUbicaciones />}
+      {activeView === "ausentismo" && <IndicadoresAusentismo />}
 
       {/* Table View */}
       {activeView === "table" && <>

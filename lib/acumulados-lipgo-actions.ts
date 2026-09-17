@@ -50,7 +50,7 @@ const CENTRO_COSTO_POR_ID: Record<number, string> = {
 
 // Mismo corte que pagonomina/archivoplano: desde el 16-jul-2026 el bono de
 // destajo viaja como "52-Bonificación Por Productividad", antes como
-// "71-Bonificación Ajuste Toneladas" -- ver pagonomina_reemplazo.sql.
+// "71-Bonificación Ajuste Toneladas" -- ver 053_pagonomina_reemplazo.sql.
 function nombreNovedadDestajo(fechaCierreQuincena: string): string {
   return fechaCierreQuincena >= "2026-07-16" ? "52-Bonificación Por Productividad" : "71-Bonificación Ajuste Toneladas"
 }

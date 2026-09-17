@@ -5,7 +5,7 @@
  *
  * Maestro de equipos + bitácora de mantenimiento + hoja de vida. Se apoya en
  * `sst_equipos` y `sst_mantenimientos`, que ya existían para esto (ver
- * scripts/create_gestion_montacargas.sql), ampliadas con QR, horómetro,
+ * scripts/104_create_gestion_montacargas.sql), ampliadas con QR, horómetro,
  * programación de preventivos y el ciclo abierto → cerrado.
  *
  * DOS EJES DE ESTADO que conviene no confundir:

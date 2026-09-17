@@ -33,7 +33,7 @@
  *   · ID3/ID4: por tipooperacion/transporte, mismo tarifaDeServicio.
  *
  * Es un LECTOR: no escribe nada. Tolerante a que `acuerdo_volumenes` aún no
- * exista (migración scripts/create_acuerdo_volumenes.sql pendiente).
+ * exista (migración scripts/113_create_acuerdo_volumenes.sql pendiente).
  */
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
@@ -589,7 +589,7 @@ export async function getAnalisisFinanciero(
       return {
         success: true,
         data: { desde, hasta, meses, proyectos: [] },
-        message: "La tabla acuerdo_volumenes no existe todavía — correr scripts/create_acuerdo_volumenes.sql.",
+        message: "La tabla acuerdo_volumenes no existe todavía — correr scripts/113_create_acuerdo_volumenes.sql.",
       }
     }
 

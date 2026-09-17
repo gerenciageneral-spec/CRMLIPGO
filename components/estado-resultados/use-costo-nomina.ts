@@ -9,7 +9,7 @@ import type { ConceptoPrestacion } from "@/lib/prestaciones-activos-actions"
 // piso 2026-08-15): ese dia se paga el "dia pleno" y su excedente de destajo
 // NO entra al bono de ESA quincena -- queda diferido a la SIGUIENTE via
 // Ajuste Nomina Anterior. MISMO criterio, MISMA fecha de piso, que
-// `agrupado_quincena.total_bono_nomina` en scripts/archivoplano_reemplazo.sql
+// `agrupado_quincena.total_bono_nomina` en scripts/059_archivoplano_reemplazo.sql
 // y que `esDiaCierre` en lib/revision-nomina-actions.ts -- si se toca uno,
 // tocar los tres.
 const PISO_EXCLUSION_DIA_CIERRE = "2026-08-15"
@@ -280,7 +280,7 @@ export function useCostoNomina({
       }
 
       // RETIRADOS (headcount.estado = 'Inactivo') quedan FUERA — MISMO
-      // filtro que archivoplano_reemplazo.sql: su nomina pendiente se paga
+      // filtro que 059_archivoplano_reemplazo.sql: su nomina pendiente se paga
       // por el submodulo Liquidaciones, no por el plano, asi que no debe
       // contar como costo aqui tampoco. Match por NOMBRE (igual que
       // pagonomina/archivoplano — no hay una llave mas fuerte disponible
@@ -331,7 +331,7 @@ export function useCostoNomina({
 
       // Ajuste Nomina Anterior APROBADO que aplica a alguna quincena cubierta
       // por [desde, hasta] -- MISMO mecanismo que `ajustes_aplicables` en
-      // archivoplano_reemplazo.sql: el excedente del dia de cierre que se
+      // 059_archivoplano_reemplazo.sql: el excedente del dia de cierre que se
       // excluyo arriba reaparece aqui, sumado al bucket de la quincena
       // SIGUIENTE (positivo o negativo, antes del piso $0 por bucket).
       const periodosEnRango = new Set(
@@ -346,7 +346,7 @@ export function useCostoNomina({
         if (ajustesError) throw ajustesError
         for (const a of ajustes || []) {
           // Mismo filtro de retirados que arriba (y que `ajustes_aplicables`
-          // en archivoplano_reemplazo.sql).
+          // en 059_archivoplano_reemplazo.sql).
           if (nombresRetirados.has(String((a as any).persona || "").trim().toUpperCase())) continue
           const periodo = bucketQuincena(Number((a as any).anio_aplica), Number((a as any).mes_aplica), Number((a as any).quincena_aplica) as 1 | 2)
           if (!periodosEnRango.has(periodo)) continue

@@ -86,7 +86,7 @@ export async function getControlToneladas(
     // 1) Órdenes del periodo, FINALIZADAS — mismo universo que pagonomina
     //    (liquida por fechacargue de órdenes con fincargue). Paginado (tope 1000).
     //    "proyeccion" excluido — residuo de un módulo manual descontinuado en
-    //    jul-2026, nunca fue tonelaje real (ver scripts/pagonomina_reemplazo.sql).
+    //    jul-2026, nunca fue tonelaje real (ver scripts/053_pagonomina_reemplazo.sql).
     const ordenesRaw: any[] = []
     for (let off = 0; ; off += 1000) {
       const { data, error } = await admin

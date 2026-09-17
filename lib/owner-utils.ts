@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 // OWNER = razón social dueña del producto, determinada por el `id_empresa` al que
 // está asignado el producto en la tabla `productos`. Es la MISMA fuente y las
 // MISMAS etiquetas que usa la vista `facturacion` (ver
-// scripts/facturacion_owner_harinera_indupan.sql), para que el PDF de la orden de
+// scripts/068_facturacion_owner_harinera_indupan.sql), para que el PDF de la orden de
 // cargue, la trazabilidad y el cobro COINCIDAN.
 //
 // Nota de negocio (confirmada): id_empresa 1 y 6 son el MISMO owner "Harinera

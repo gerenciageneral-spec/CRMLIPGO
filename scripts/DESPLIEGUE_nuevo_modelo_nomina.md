@@ -10,15 +10,15 @@ Todo son **vistas** (no tocan datos) + un ajuste de código. **Reversible en cua
 ## Orden de despliegue (Supabase SQL Editor)
 
 **PASO 0 — Ventana de reversa (OBLIGATORIO primero).**
-Corre [`scripts/00_CAPTURA_rollback_nomina.sql`](00_CAPTURA_rollback_nomina.sql). Copia las
+Corre [`scripts/086_CAPTURA_rollback_nomina.sql`](086_CAPTURA_rollback_nomina.sql). Copia las
 **dos celdas** de resultado y guárdalas en un archivo, p.ej. `rollback_nomina_2026-07-28.sql`.
 Ese archivo es tu botón de **deshacer** (restaura las vistas tal como están hoy).
 
-**PASO 1 — pagonomina.** Corre [`scripts/pagonomina_reemplazo.sql`](pagonomina_reemplazo.sql).
+**PASO 1 — pagonomina.** Corre [`scripts/053_pagonomina_reemplazo.sql`](053_pagonomina_reemplazo.sql).
 - Día de destajo → liquida la **base** (no el valor de sus toneladas).
 - `bonif_prestacional` = excedente del día **con signo, sin tope** (todo prestacional).
 
-**PASO 2 — archivoplano.** Corre [`scripts/archivoplano_reemplazo.sql`](archivoplano_reemplazo.sql).
+**PASO 2 — archivoplano.** Corre [`scripts/059_archivoplano_reemplazo.sql`](059_archivoplano_reemplazo.sql).
 - Bono = `MAX(0, Σ excedente neto de la quincena)`.
 - **Horas extra completas** (se eliminó la nivelación que las recortaba).
 
@@ -31,9 +31,9 @@ quedaron alineados para sumar el **bono neto de quincena** (piso 0, todo prestac
 - `nominapersonal`: tarjetas de **Bono productividad** y **Pago real (base + bono)** (el
   total diario sigue cuadrando con la tabla/Excel).
 - Nuevo módulo **Gestión Humana › Revisión de nómina** (cuadro por colaborador) + permiso
-  `revision_nomina` (correr `scripts/add_revision_nomina_permission.sql`).
+  `revision_nomina` (correr `scripts/087_add_revision_nomina_permission.sql`).
 
-**PASO 4 — Permiso del módulo.** Corre [`scripts/add_revision_nomina_permission.sql`](add_revision_nomina_permission.sql)
+**PASO 4 — Permiso del módulo.** Corre [`scripts/087_add_revision_nomina_permission.sql`](087_add_revision_nomina_permission.sql)
 y otorga `revision_nomina` a quien deba ver el módulo.
 
 > Importante: el PASO 3 (código) y los PASOS 1-2 (SQL) deben quedar vigentes **juntos**.

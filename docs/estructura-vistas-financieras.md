@@ -4,7 +4,7 @@ Documento de referencia de las **vistas/tablas** que alimentan la parte financie
 (nómina, facturación y liquidación). Las columnas están tomadas de la BD real y de
 cómo las consume la app. Las **definiciones SQL** de las vistas viven en Supabase
 (no en el repo); para traerlas y pegarlas aquí, corre
-[`scripts/dump_vistas_financieras.sql`](../scripts/dump_vistas_financieras.sql) y
+[`scripts/048_dump_vistas_financieras.sql`](../scripts/048_dump_vistas_financieras.sql) y
 comparte el resultado (ver sección final).
 
 > Convención multi-empresa: casi todas filtran por una columna de empresa
@@ -36,7 +36,7 @@ Una fila por **persona + día**, ya liquidada (produccion, recargos, horas extra
 
 - **Recargos/horas extra:** `horas_*` = horas; `hed/hedf/hen/hef/hn` = valores $
   (diurna, diurna festiva, nocturna, festiva, recargo nocturno). Alimentadas por el
-  trigger [`calcular_y_asignar_horas_extras`](../scripts/fn_calcular_y_asignar_horas_extras.sql)
+  trigger [`calcular_y_asignar_horas_extras`](../scripts/049_fn_calcular_y_asignar_horas_extras.sql)
   sobre `registroasistencia` para el personal de especialidad.
 - **Se usa en:** `components/nominapersonal.tsx` (liquidaciones, filtra por
   `idempresaliquidacion` + rango `fecha`); `components/estado-resultados/use-costo-nomina.ts`
@@ -86,19 +86,19 @@ Una fila por **auxiliar + día** con toneladas movidas, pago y operaciones.
 
 - **Se usa en:** `components/nominapersonal.tsx` (totales de auxiliares por
   `idempresa`, orden desc por `fechacargue`).
-- Existe un script de tabla asociado: `scripts/create_toneladasauxilirespago_table.sql`.
+- Existe un script de tabla asociado: `scripts/036_create_toneladasauxilirespago_table.sql`.
 
 ---
 
 ## Trigger de horas extra
-La función [`calcular_y_asignar_horas_extras`](../scripts/fn_calcular_y_asignar_horas_extras.sql)
+La función [`calcular_y_asignar_horas_extras`](../scripts/049_fn_calcular_y_asignar_horas_extras.sql)
 (BEFORE INSERT/UPDATE en `registroasistencia`) calcula `hed`/`hedf` para el personal de
 especialidad (regla de 30 min de tolerancia, jornada base 7.3333h + 1h descanso, truncado
 a 2 decimales, domingo→`hedf`). Estas columnas fluyen hacia `pagonomina` y `facturacionturnos`.
 
 ## Definiciones SQL (DDL)
 El **DDL real** (los `CREATE OR REPLACE VIEW`) está versionado en
-[`scripts/vistas_financieras.sql`](../scripts/vistas_financieras.sql). Las 5 son
+[`scripts/050_vistas_financieras.sql`](../scripts/050_vistas_financieras.sql). Las 5 son
 **vistas** (no tablas). Orden de dependencias:
 
 ```
@@ -124,7 +124,7 @@ Construye un **calendario persona×día** (rango min/max de `cabeceraoc.fechacar
   (norma CO). `HOD = salario/(dias×jornada)`; `hed/hen/hedf/hef = cant × HOD × (1+%/100)` (hora
   completa) y `hn = cant × HOD × %/100` (recargo puro). El JOIN a `tarifasturnos` se conserva solo
   como **registro de qué puestos son de turno** (vigencia/`especialidad`); sus columnas de dinero
-  (`base/hed/…`) ya **no se leen**. Ver `scripts/extend_parametros_nomina.sql`.
+  (`base/hed/…`) ya **no se leen**. Ver `scripts/051_extend_parametros_nomina.sql`.
 - **Valor base día:** `salario/30` (o 58.364 por defecto) según asistencia/novedad;
   incapacidades (100/66/50%), vacaciones, descansos y festivos con sus reglas.
 - **Domingo:** paga solo si la semana previa (ventana 6 días) no tuvo faltas, vacíos ni
@@ -161,4 +161,4 @@ Misma explosión de `cabeceraoc.auxiliares` × `tarifaspersonal` que `pagonomina
 `total_pago_dia`, `total_operaciones_realizadas`.
 
 > Para volver a extraer/actualizar estas definiciones desde Supabase:
-> [`scripts/dump_vistas_financieras.sql`](../scripts/dump_vistas_financieras.sql).
+> [`scripts/048_dump_vistas_financieras.sql`](../scripts/048_dump_vistas_financieras.sql).

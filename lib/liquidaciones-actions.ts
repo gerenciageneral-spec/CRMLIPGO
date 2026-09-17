@@ -20,7 +20,7 @@ import { clasificarDiaCotizacion } from "@/lib/parafiscales"
 // Corte de la reversión "nómina pendiente vuelve a pagarse por el plano"
 // (2026-09-08, pedido explícito del usuario): antes, al retirarse alguien se
 // excluía TODA su nómina pendiente del archivo plano y se cobraba junto con
-// la liquidación (ver archivoplano_reemplazo.sql). Ahora la nómina de los
+// la liquidación (ver 059_archivoplano_reemplazo.sql). Ahora la nómina de los
 // días trabajados hasta el retiro debe seguir saliendo en el plano de la
 // quincena (nómina normal) "mientras se organiza el pago de la liquidación";
 // Liquidaciones queda solo para las OTRAS acreencias (cesantías, intereses,
@@ -28,7 +28,7 @@ import { clasificarDiaCotizacion } from "@/lib/parafiscales"
 // por el usuario): los retiros YA procesados (fecha_retiro < este corte) no
 // se tocan -- su nómina pendiente sigue sumando al total de Liquidaciones,
 // exactamente como antes. El MISMO corte gobierna la vista SQL `archivoplano`
-// (ver scripts/archivoplano_reemplazo.sql, WHERE de `base_datos` y las otras
+// (ver scripts/059_archivoplano_reemplazo.sql, WHERE de `base_datos` y las otras
 // 3 ramas que unen contra headcount) -- si se mueve aquí, hay que moverlo
 // también allá (son 4 lugares en ese archivo, documentados con la misma
 // nota "si se cambia una, cambiar las 4").
@@ -244,7 +244,7 @@ function sumaPeriodo(
       if (clasificarDiaCotizacion(r.novedad_reportada) === "TRAB") diasAux += 1
       if (f >= BONO_DESTAJO_PRESTACIONAL_DESDE) {
         // Ya NO se excluye especialidad=true: la vista `pagonomina` (scripts/
-        // pagonomina_reemplazo.sql:659,872) ya deja `bonif_prestacional` en $0
+        // 053_pagonomina_reemplazo.sql:659,872) ya deja `bonif_prestacional` en $0
         // para un día de especialidad=true SIN apoyo en cargue real (toneladas
         // sin asignación en apoyo_cargue_asignaciones) -- filtrar de nuevo por
         // `!especialidad` aquí duplicaba la exclusión y de paso le quitaba a la

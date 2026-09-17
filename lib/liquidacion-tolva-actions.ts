@@ -65,7 +65,7 @@ const PUESTO_AUXILIAR_MIXTO = "Auxiliar Mixto"
  * La Tolva se liquida SOLO sobre la produccion que reporta el LOGO.
  *
  * Ese valor lo escribe el trigger `fn_sync_produccion_to_invtrans` (ver
- * scripts/fix_trigger_produccion_fechaprod.sql), que lo tiene fijo en 'LOGO'
+ * scripts/125_fix_trigger_produccion_fechaprod.sql), que lo tiene fijo en 'LOGO'
  * para TODA fila que nazca de la tabla `produccion` — tanto la que sube el LOGO
  * como la que registra LIPGO por QR. Es decir: esto NO deja fuera la produccion
  * de LIPGO por QR.
@@ -260,7 +260,7 @@ export async function getLiquidacionTolvaDia(
     //
     // El (b) existe porque la produccion que sube el LOGO nacia SIN `fechaprod`:
     // el trigger `fn_sync_produccion_to_invtrans` no escribia esa columna (ver
-    // scripts/fix_trigger_produccion_fechaprod.sql, que ya lo corrige de raiz).
+    // scripts/125_fix_trigger_produccion_fechaprod.sql, que ya lo corrige de raiz).
     // Sin este respaldo, toda la produccion historica del LOGO queda invisible
     // aqui aunque este aprobada.
     //

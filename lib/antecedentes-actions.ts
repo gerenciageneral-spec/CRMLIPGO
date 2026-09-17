@@ -17,7 +17,7 @@ export interface Antecedente {
   contraloria_url: string | null
   contraloria_nombre: string | null
   created_at: string
-  // Decisión + consulta Compliance (columnas nuevas, ver add_antecedentes_decision.sql).
+  // Decisión + consulta Compliance (columnas nuevas, ver 046_add_antecedentes_decision.sql).
   estado?: "pendiente" | "aceptado" | "rechazado" | null
   compliance_pdf_url?: string | null
   compliance_pdf_nombre?: string | null

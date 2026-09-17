@@ -185,6 +185,11 @@ export const groups: Group[] = [
       {
         title: "Operación Lip",
         modules: [
+          // Panel ejecutivo del coordinador: personal, cobertura de turnos,
+          // pendientes del dia, solicitudes de personal y pago de la quincena,
+          // todo de la empresa seleccionada. No calcula nada por su cuenta:
+          // reune las cifras de los modulos que ya las producen.
+          { name: "Operación del día", icon: LayoutDashboard },
           { name: "Picking", icon: PackagePlus },
           { name: "Packing", icon: Package },
           { name: "Ver Picking/Packing", icon: Eye },
@@ -361,6 +366,10 @@ export const groups: Group[] = [
           // Seguimiento del costo recuperable de incapacidades (EPS/ARL).
           // Comparte el permiso de "Ausentismos".
           { name: "Recobro de Incapacidades", icon: CreditCard },
+          // La usuaria reporta la conducta y solicita la medida; el empleador
+          // cita a descargos y decide. Permiso propio: el caso contiene el
+          // relato de una conducta y el nombre de testigos.
+          { name: "Procesos Disciplinarios", icon: Scale },
         ],
       },
       {
@@ -491,7 +500,7 @@ export const groups: Group[] = [
           { name: "Equipos y Mantenimiento", icon: Settings, label: "Equipos y Mantenimiento" },
           // Va junto al preoperacional (que alimenta su hoja de vida) y a
           // Equipos y Mantenimiento, con el que comparte sst_equipos y
-          // sst_mantenimientos. Ver scripts/create_gestion_montacargas.sql.
+          // sst_mantenimientos. Ver scripts/104_create_gestion_montacargas.sql.
           { name: "Gestión de Montacargas", icon: Forklift, label: "Gestión de Montacargas" },
           { name: "Entrega de EPP", icon: ShieldCheck, label: "Entrega de EPP" },
           { name: "Gestión de Dotación EPP", icon: Package, label: "Dotación de EPP" },

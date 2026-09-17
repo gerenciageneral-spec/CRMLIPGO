@@ -10,7 +10,7 @@
  * pantalla "Ajustes registrados"). YA NO son códigos de novedad que se
  * envíen a Siigo: el positivo y el negativo se FUNDEN en la novedad
  * "52-Bonificación Por Productividad-Ingreso" normal de la quincena que
- * aplica (ver scripts/archivoplano_reemplazo.sql, `ajustes_aplicables`) — es
+ * aplica (ver scripts/059_archivoplano_reemplazo.sql, `ajustes_aplicables`) — es
  * el MISMO concepto de bono, solo que del día de cierre. Esto es solo texto
  * para que el coordinador vea de un vistazo si el ajuste sube o baja el
  * acumulado, antes de aprobarlo.

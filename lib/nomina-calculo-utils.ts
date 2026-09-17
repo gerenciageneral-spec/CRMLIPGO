@@ -7,7 +7,7 @@
 
 const CEDIS = new Set([3, 4]) // Cedi Funza, Cedi Medellin — sin bascula propia
 
-/** Replica exacta de `peso_base_calculo` (pagonomina_reemplazo.sql). */
+/** Replica exacta de `peso_base_calculo` (053_pagonomina_reemplazo.sql). */
 export function pesoBaseCalculo(
   idempresa: number,
   tipooperacion: string,
@@ -31,7 +31,7 @@ export function pesoBaseCalculo(
  * AVIMOL (idempresa=2): la Distribucion NO se paga por destajo — el clon
  * automatico "+D" hereda los mismos `auxiliares` de su Cargue madre, asi que
  * sin esta exclusion esas personas se contarian dos veces (Cargue + Distribucion
- * clon). Mismo criterio que `pagonomina_reemplazo.sql` y
+ * clon). Mismo criterio que `053_pagonomina_reemplazo.sql` y
  * `lib/ajuste-proyeccion-actions.ts` — si se toca uno, tocar los tres.
  */
 export function excluirAvimolDistribucion(idempresa: number, tipooperacion: string): boolean {

@@ -52,7 +52,7 @@ export interface DiaRevision {
   hcAsistenciaDia: number // HC real (registroasistencia): auxiliares de Cargue/Distribución con asistencia real ese día
   /** El 15 o el último día del mes (desde el piso 2026-08-15): su excedente NO
    * entra al neto de ESTA quincena — queda diferido a la siguiente vía Ajuste
-   * Nómina Anterior. Mismo criterio que archivoplano_reemplazo.sql
+   * Nómina Anterior. Mismo criterio que 059_archivoplano_reemplazo.sql
    * ("EXCLUIR EL DÍA DE CIERRE"). */
   diaCierre: boolean
 }
@@ -157,10 +157,10 @@ const num = (v: any) => Number(v || 0)
 const fin = (anio: number, mes: number) => new Date(anio, mes, 0).getDate()
 
 // El 15 y el último día del mes son el día de cierre de su quincena (desde el
-// piso 2026-08-15): ese día se paga el "día pleno" (ver pagonomina_reemplazo.sql)
+// piso 2026-08-15): ese día se paga el "día pleno" (ver 053_pagonomina_reemplazo.sql)
 // y su excedente de destajo NO entra al neto de ESTA quincena — queda diferido a
 // la SIGUIENTE vía Ajuste Nómina Anterior. MISMO criterio, MISMA fecha de piso,
-// que `agrupado_quincena.total_bono_nomina` en archivoplano_reemplazo.sql — si se
+// que `agrupado_quincena.total_bono_nomina` en 059_archivoplano_reemplazo.sql — si se
 // toca uno, tocar el otro.
 const PISO_EXCLUSION_DIA_CIERRE = "2026-08-15"
 function esDiaCierre(fechaISO: string): boolean {
@@ -191,7 +191,7 @@ async function fetchAllRows(makeQuery: (from: number, to: number) => any): Promi
 }
 
 // `liquidable`: ¿esta persona entra a la Revisión de nómina? Misma regla del
-// negocio que filtra el ARCHIVO PLANO (ver scripts/archivoplano_reemplazo.sql):
+// negocio que filtra el ARCHIVO PLANO (ver scripts/059_archivoplano_reemplazo.sql):
 // RETIRADOS fuera (su nómina pendiente se paga por Liquidaciones) y SIN CONTRATO
 // fuera (sin `contratosiigo` no hay vínculo al que cargarle la novedad en Siigo).
 // Movida a `lib/nomina-calculo-utils.ts` (compartida con Control de Toneladas).
@@ -269,7 +269,7 @@ interface CtxRevision {
   vig: any | null
   /** Ajuste Nómina Anterior APROBADO que aplica a ESTA quincena (positivo o
    * negativo) — "idempresa|identificacion". MISMA llave y MISMO criterio que
-   * `ajustes_aplicables` en archivoplano_reemplazo.sql: sin esto, el "Neto de
+   * `ajustes_aplicables` en 059_archivoplano_reemplazo.sql: sin esto, el "Neto de
    * la quincena" de esta pantalla no incluye el ajuste que SÍ ya está fundido
    * en la novedad 52- que le llega a Siigo. */
   ajustesAplicables: Map<string, number>
@@ -368,7 +368,7 @@ async function armarContexto(
 
   // Ajuste Nómina Anterior APROBADO que aplica a ESTA quincena. MISMO join
   // (idempresa + identificacion TRIM) y MISMA suma que `ajustes_aplicables`
-  // en archivoplano_reemplazo.sql — para que esta pantalla reconcilie exacto
+  // en 059_archivoplano_reemplazo.sql — para que esta pantalla reconcilie exacto
   // contra lo que de verdad viaja a Siigo.
   const { data: ajustesRows } = await admin
     .from("ajustes_proyeccion")
@@ -494,7 +494,7 @@ function armarPersona(
         else domDescanso += domingo
       }
       // Apoyo en cargue (especialidad=true CON tonelaje real ese día): la vista
-      // `pagonomina` (scripts/pagonomina_reemplazo.sql:659,872) ya deja
+      // `pagonomina` (scripts/053_pagonomina_reemplazo.sql:659,872) ya deja
       // `bonif_prestacional` en $0 salvo que haya un apoyo real registrado en
       // `apoyo_cargue_asignaciones` -- ese dinero SÍ viaja al archivo plano
       // (novedad 52) aunque la persona sea de turno fijo. No se suma a
@@ -506,7 +506,7 @@ function armarPersona(
       const bonoApoyoCargue = esp ? Number(r.bonif_prestacional || 0) : 0
       if (esDestajo || bonoApoyoCargue !== 0) {
         // EXCLUIR EL DÍA DE CIERRE del neto de ESTA quincena — igual que
-        // archivoplano_reemplazo.sql: ese día ya se pagó a día pleno, y su
+        // 059_archivoplano_reemplazo.sql: ese día ya se pagó a día pleno, y su
         // excedente queda diferido a la quincena SIGUIENTE (Ajuste Nómina
         // Anterior). Sin esto, el "Neto de la quincena" de esta pantalla no
         // cuadraba con lo que de verdad viaja al archivo plano.
@@ -581,7 +581,7 @@ function armarPersona(
     // Ajuste Nómina Anterior aprobado que APLICA a esta quincena (viene del
     // día de cierre de la quincena ANTERIOR) — se suma ANTES del piso $0,
     // exactamente como `agrupado_quincena.total_bono_nomina` en
-    // archivoplano_reemplazo.sql. Sin esto, "Neto de la quincena" no incluye
+    // 059_archivoplano_reemplazo.sql. Sin esto, "Neto de la quincena" no incluye
     // lo que YA está fundido en la novedad 52- que le llega a Siigo.
     const ajusteNominaAnterior = empresa != null ? ajustesAplicables.get(`${empresa}|${identificacion}`) || 0 : 0
     const netoConAjuste = neto + ajusteNominaAnterior
@@ -712,7 +712,7 @@ function armarPersona(
         // ramas y se ignorarían en silencio, descuadrando el cruce.
         //
         // El bono de productividad se acepta con SUS DOS códigos: 52 desde la
-        // quincena del 16-jul-2026 y 71 antes (ver archivoplano_reemplazo.sql).
+        // quincena del 16-jul-2026 y 71 antes (ver 059_archivoplano_reemplazo.sql).
         // Reconocer solo el nuevo dejaría sin bono el cruce de toda quincena
         // anterior, que es justo donde uno va a revisar el histórico.
         if (
@@ -752,7 +752,7 @@ function armarPersona(
           // INCAPACIDAD SIEMPRE AL 100% (2026-09-08, confirmado por el usuario + verificado
           // con datos reales de Siigo, caso IVAN ANDRES CASTRO BELTRAN): el "66%"/"50%" del
           // nombre de la novedad es solo la clasificación legal, no el neto real -- mismo
-          // criterio que pagonomina_reemplazo.sql. Solo la licencia no remunerada (38) sí
+          // criterio que 053_pagonomina_reemplazo.sql. Solo la licencia no remunerada (38) sí
           // descuenta el día de verdad.
           let netoDia = 0
           let nota = "pagada 100% (sin efecto neto)"
@@ -1221,7 +1221,7 @@ export async function getRevisionNominaProyecto(
 // CONCILIACIÓN PESO ↔ PAGO ↔ FACTURACIÓN (quincena, LIP completo: id 1-4)
 // Garantiza que lo PAGADO al personal cuadre con lo FACTURABLE. La fuente de
 // verdad del peso cambia por proyecto — MISMO criterio que `peso_base_calculo`
-// en pagonomina_reemplazo.sql (no se reinventa, se replica 1:1):
+// en 053_pagonomina_reemplazo.sql (no se reinventa, se replica 1:1):
 //   - Plantas con báscula física (Indupan=1, Avimol=2): SIEMPRE pesovascula,
 //     cualquier operación.
 //   - CEDIS (Cedi Funza=3, Cedi Medellín=4) en Descargue: báscula del tiquete
@@ -1338,7 +1338,7 @@ export async function getConciliacionQuincena(
     // 1) Órdenes del periodo — MISMO universo que pagonomina: fincargue no vacío
     //    (la vista liquida por fechacargue). Paginado (tope Supabase 1000).
     //    "proyeccion" excluido (2026-09-08): residuo de un módulo manual
-    //    descontinuado en jul-2026 (ver scripts/pagonomina_reemplazo.sql) —
+    //    descontinuado en jul-2026 (ver scripts/053_pagonomina_reemplazo.sql) —
     //    nunca fue tonelaje real, mismo criterio que la vista ya corregida.
     const ordenesRaw: any[] = []
     for (let off = 0; ; off += 1000) {

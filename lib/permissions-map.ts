@@ -64,6 +64,9 @@ export interface UserPermissions {
   // tiempo real). Coincide con el nombre de la columna en
   // `permisos_usuarios` (todo en minuscula, sin separador).
   controlpiso: boolean
+  // Panel "Operación del día" (Operación LIP). Coincide con el nombre de la
+  // columna en `permisos_usuarios`.
+  operacion_dia: boolean
   asignacion_lotes: boolean
   historial_lotes: boolean
   registro_sanitario: boolean
@@ -222,7 +225,7 @@ export interface UserPermissions {
   sst_comunicacion: boolean
   sst_gestion_cambio: boolean
   sst_actividades: boolean
-  // Nuevas (creadas por scripts/add_permisos_certificaciones_gh.sql)
+  // Nuevas (creadas por scripts/016_add_permisos_certificaciones_gh.sql)
   sst_repositorio_soportes: boolean
   sst_alertas_at: boolean
   sst_investigaciones: boolean
@@ -255,6 +258,10 @@ export interface UserPermissions {
   gh_entrevistas: boolean
   gh_bienestar: boolean
   gh_participacion: boolean
+  // Procesos disciplinarios. Permiso PROPIO: el caso contiene el relato de una
+  // conducta, el nombre de testigos y la decision que se tomo. No es
+  // informacion operativa y no se hereda del permiso de novedades.
+  procesos_disciplinarios: boolean
 }
 
 export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
@@ -314,12 +321,13 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   "Gestión de Contratos": "gestion_contratos",
   // Examenes Médicos: parte de SST, con permiso PROPIO (`examenes_medicos`)
   // para poder otorgarlo por separado en Gestión de Usuarios. Se puebla desde
-  // sst_autoevaluacion (ver scripts/add_examenes_medicos_permission.sql) para
+  // sst_autoevaluacion (ver scripts/063_add_examenes_medicos_permission.sql) para
   // no quitarle el acceso a quien ya audita la matriz 0312.
   "Examenes Médicos": "examenes_medicos",
   "Gestión de Dotación EPP": "dotacion_epp",
   "Gestión de Capacitaciones": "capacitaciones",
   "Asistencia a Capacitaciones": "asistencia_capacitaciones",
+  "Operación del día": "operacion_dia",
   "Solicitud de Personal": "solicitud_personal",
   "Evaluaciones de Desempeño": "evaluacionpersonal",
   "Evidencia de Inducciones": "evidenciasinducciones",
@@ -457,7 +465,7 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   // Permiso propio (2026-09-01): antes compartia `auditoria_inventario` con
   // Panel LIP Inventario y Auditoría de Inventario (ambos de solo lectura) --
   // Cuadre es el UNICO que ajusta stock real al cerrar el mes, y compartir la
-  // llave impedia otorgarlo por separado. Ver scripts/add_cuadre_inventario_permission.sql.
+  // llave impedia otorgarlo por separado. Ver scripts/154_add_cuadre_inventario_permission.sql.
   "Cuadre de Inventario": "cuadre_inventario",
   "Panel LIP Gestión Humana": "sig_matriz",
   // ISO 14001 (Ambiental)
@@ -472,4 +480,5 @@ export const MODULE_PERMISSION_MAP: Record<string, keyof UserPermissions> = {
   Entrevistas: "gh_entrevistas",
   "Programa de Bienestar": "gh_bienestar",
   "Participación y Evidencias": "gh_participacion",
+  "Procesos Disciplinarios": "procesos_disciplinarios",
 }

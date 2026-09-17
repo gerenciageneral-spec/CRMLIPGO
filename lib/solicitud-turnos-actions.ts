@@ -203,7 +203,7 @@ export async function aprobarSolicitudes(params: AprobarSolicitudesParams) {
 
     // El reparto de las horas entre el personal NO se hace aqui: lo resuelve la
     // vista `solicitud_horas_extras` a partir de `personal` y `cantidad` (ver
-    // scripts/create_solicitud_horas_extras.sql). Hacerlo en la vista corrige
+    // scripts/121_create_solicitud_horas_extras.sql). Hacerlo en la vista corrige
     // ademas, de forma retroactiva, todas las solicitudes ya aprobadas.
     //
     // Lo unico que se advierte aqui es el caso en que unas horas extra se

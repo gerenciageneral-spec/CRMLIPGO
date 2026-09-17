@@ -46,7 +46,7 @@ interface SolicitudTurno {
   tipo: string | null
   // URL al PDF generado al momento de la aprobacion. Se persiste en
   // la columna `pdfaprobacion` de solicitudesturnos (ver script
-  // scripts/add-pdfaprobacion-column.sql). Es null para solicitudes
+  // scripts/007_add-pdfaprobacion-column.sql). Es null para solicitudes
   // pendientes / rechazadas.
   pdfaprobacion: string | null
 }

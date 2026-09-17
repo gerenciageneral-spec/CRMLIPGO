@@ -561,7 +561,7 @@ export async function guardarPrefactura(payload: {
         // varios (caso manual, "ownerMezclado"), se deja NULL en vez de
         // guardar el primero cualquiera: un NULL avisa "no consultable por
         // owner", un valor guardado a medias sería peor (parecería de un
-        // solo cliente sin serlo). Ver scripts/add_owner_prefacturas.sql.
+        // solo cliente sin serlo). Ver scripts/172_add_owner_prefacturas.sql.
         owner: owners.length === 1 ? owners[0] : null,
         periodo_desde: payload.periodo_desde || null,
         periodo_hasta: payload.periodo_hasta || null,

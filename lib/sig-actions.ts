@@ -1963,7 +1963,7 @@ async function _computeIndicadoresValores(
     // Toneladas (suma en memoria: pesovascula) + meta del periodo por sede.
     // "proyeccion" excluido (2026-09-08): residuo de un módulo manual
     // descontinuado en jul-2026, nunca fue tonelaje real (ver
-    // scripts/pagonomina_reemplazo.sql). "Tolva"/"Tolva f" excluido
+    // scripts/053_pagonomina_reemplazo.sql). "Tolva"/"Tolva f" excluido
     // (2026-09-15): es PRODUCCIÓN (solo ID1), no Cargue/Descargue/
     // Distribución -- tiene su propio indicador OEE y su propia meta
     // (EMPRESA_META_DIA_TON ya excluye Tolva, ver lib/empresa-meta-dia.ts);
@@ -4592,7 +4592,7 @@ export async function getPanelOperacionLIP(
     // --- Órdenes (cabeceraoc): traer columnas necesarias y agregar en memoria ---
     // "proyeccion" excluido (2026-09-08): residuo de un módulo manual
     // descontinuado en jul-2026, nunca fue una orden real de cliente (ver
-    // scripts/pagonomina_reemplazo.sql) — sin esto inflaba tanto el tonelaje
+    // scripts/053_pagonomina_reemplazo.sql) — sin esto inflaba tanto el tonelaje
     // como los conteos de órdenes/evidencia/ciclo de este panel.
     const rows: any[] = await pagAll((from, to) => {
       let q = supabase

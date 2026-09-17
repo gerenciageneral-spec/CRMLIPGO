@@ -44,7 +44,7 @@ export interface HeadcountPerson {
   // "Retiro"; también editable en el formulario. String date (YYYY-MM-DD).
   fecha_retiro?: string | null
   // Datos de Seguridad Social (PILA) -- capturados al contratar, no en una
-  // ficha aparte (ver scripts/add_pila_fields_headcount.sql). Los lee
+  // ficha aparte (ver scripts/170_add_pila_fields_headcount.sql). Los lee
   // lib/parafiscales-exportador-actions.ts para armar el archivo plano.
   ciudad?: string | null
   administradora_pension?: string | null // AFP, nombre libre -- ver lib/pila-codigos-oficiales.ts
