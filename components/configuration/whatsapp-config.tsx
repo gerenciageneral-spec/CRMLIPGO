@@ -170,8 +170,12 @@ export default function WhatsappConfig() {
     cargar()
   }
 
-  const urlWebhook =
-    typeof window !== "undefined" ? `${window.location.origin}/api/whatsapp/webhook` : ""
+  // La URL se arma con el origen ACTUAL. Si se abre LIPgo en localhost, sale una
+  // URL que Meta no puede alcanzar: su servidor tiene que poder llamarla desde
+  // internet. Se detecta para avisarlo en vez de dejar copiar algo inservible.
+  const origen = typeof window !== "undefined" ? window.location.origin : ""
+  const urlWebhook = origen ? `${origen}/api/whatsapp/webhook` : ""
+  const esLocal = /localhost|127\.0\.0\.1|^http:\/\//.test(origen)
 
   if (cargando) {
     return (
@@ -289,11 +293,48 @@ export default function WhatsappConfig() {
                 Copiar
               </Button>
             </div>
+            {esLocal && (
+              <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+                <p className="font-medium">Esta URL no le sirve a Meta</p>
+                <p className="mt-0.5">
+                  Estás viendo LIPgo en <code>{origen}</code>. El servidor de Meta tiene que poder
+                  llamar la URL desde internet, y no alcanza tu máquina ni direcciones sin HTTPS.
+                  Abre LIPgo con el dominio de producción y copia la URL desde ahí.
+                </p>
+              </div>
+            )}
             <p className="mt-2 text-[11px] text-muted-foreground">
               El token de verificación es el valor de <code>WHATSAPP_VERIFY_TOKEN</code>. Solo llegan
               acuses reales con la app en modo <strong>Activo</strong>; en Desarrollo, Meta únicamente
               envía eventos de prueba.
             </p>
+            {/* Probar el endpoint sin salir de la pantalla: si esto devuelve el
+                challenge, el problema esta en lo que se pego en Meta. */}
+            {!esLocal && urlWebhook && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Para comprobar que responde,{" "}
+                <a
+                  className="text-teal-700 underline"
+                  href={`${urlWebhook}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(
+                    "" /* el token real no se expone: se escribe a mano */,
+                  )}&hub.challenge=prueba123`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    const t = window.prompt("Escribe el valor de WHATSAPP_VERIFY_TOKEN para probar:")
+                    if (!t) return
+                    window.open(
+                      `${urlWebhook}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(t)}&hub.challenge=prueba123`,
+                      "_blank",
+                    )
+                  }}
+                >
+                  ábrela con el token
+                </a>
+                : debe mostrar <code>prueba123</code>.
+              </p>
+            )}
           </div>
         </div>
       </section>
