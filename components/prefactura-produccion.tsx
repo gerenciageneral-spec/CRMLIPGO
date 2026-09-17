@@ -239,6 +239,7 @@ export default function PrefacturaProduccion({ idempresaFija }: { idempresaFija?
     const wsSop = XLSX.utils.json_to_sheet(
       soporteSel.map((s) => ({
         Fecha: s.fecha,
+        Lote: s.lote ?? "",
         Concepto: s.concepto,
         Detalle: s.detalle,
         Orden: s.referencia ?? "",
@@ -723,6 +724,7 @@ function TablaSoporte({ lineas }: { lineas: SoporteProduccion[] }) {
         <thead>
           <tr className="border-b bg-muted/40 text-left text-muted-foreground">
             <th className="py-1 pl-2 font-medium">Fecha</th>
+            <th className="py-1 font-medium">Lote</th>
             <th className="py-1 font-medium">Concepto</th>
             <th className="py-1 font-medium">Detalle</th>
             <th className="py-1 text-right font-medium">Bultos</th>
@@ -736,6 +738,7 @@ function TablaSoporte({ lineas }: { lineas: SoporteProduccion[] }) {
           {mostradas.map((l, i) => (
             <tr key={i} className="border-b last:border-0">
               <td className="py-1 pl-2">{l.fecha}</td>
+              <td className="py-1">{l.lote ?? "—"}</td>
               <td className="py-1">{l.concepto}</td>
               <td className="py-1">{l.detalle}</td>
               <td className="py-1 text-right">{l.bultos != null ? cant(l.bultos) : "—"}</td>
@@ -748,7 +751,7 @@ function TablaSoporte({ lineas }: { lineas: SoporteProduccion[] }) {
             </tr>
           ))}
           <tr className="border-t-2 font-semibold">
-            <td className="py-1 pl-2" colSpan={7}>
+            <td className="py-1 pl-2" colSpan={8}>
               TOTAL SOPORTE
             </td>
             <td className="py-1 pr-2 text-right">{money(totalVal)}</td>

@@ -18,28 +18,23 @@ import { getLocations, getAlmacenes } from "@/lib/inventory-actions"
 import { getCurrentEmpresaIdForInsert } from "@/lib/user-context"
 import { useAuth } from "@/components/auth-provider"
 
-// `invtrans.creado` se guarda en UTC (verificado con datos reales: una fila
-// recién creada muestra su `creado` igual a la hora UTC del momento, 5 horas
-// adelante de Colombia) — hay que CONVERTIR, no leer el string crudo (eso
-// mostraba la hora de producción 5 horas adelantada). Mismo criterio que
-// `fechaColombiaDe`/`fechaColombiaUI` ya usados en Inventario/SIG.
+// CORREGIDO 2026-09-16 (regresión del commit 90faa0f, 2026-08-12): para las
+// filas que suben del LOGO (producción, `creadopor='LOGO'`), `invtrans.creado`
+// guarda la hora de PARED de Colombia etiquetada como UTC (+00:00) -- NO es
+// UTC real. Verificado con datos en vivo: la fila más reciente por id mostraba
+// `creado` ~1 hora antes de la hora actual de Colombia, no ~6 horas (que sería
+// lo esperado si `creado` fuera UTC real). Aplicarle un `Intl.DateTimeFormat`
+// con `timeZone:"America/Bogota"` sobre `new Date(creado)` (como hacía la
+// versión de agosto) RESTA 5 horas de más y muestra la producción 5 horas
+// atrasada -- justo el reporte del usuario. Se extraen los dígitos literales
+// del string, sin pasar por `Date`/zona horaria -- mismo patrón ya probado en
+// `lib/liquidacion-tolva-actions.ts` (`partesLiterales`) para el turno de Tolva.
 function formatCreadoExacto(creado: string | null | undefined): string {
   if (!creado) return "N/A"
-  try {
-    const partes = new Intl.DateTimeFormat("es-CO", {
-      timeZone: "America/Bogota",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(new Date(creado))
-    const get = (t: string) => partes.find((p) => p.type === t)?.value ?? ""
-    return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`
-  } catch {
-    return creado
-  }
+  const m = String(creado).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/)
+  if (!m) return creado
+  const [, y, mo, d, h, mi] = m
+  return `${d}/${mo}/${y} ${h}:${mi}`
 }
 
 export function ProductionApproval() {

@@ -36,7 +36,6 @@ import {
   PROYECTOS_PRODUCCION,
   AVIMOL_ID as AVIMOL,
   INDUPAN_ID as INDUPAN,
-  OPS_INDUPAN,
 } from "@/lib/prefactura-produccion-constants"
 
 const num = (v: any) => {
@@ -76,6 +75,11 @@ export interface SoporteProduccion {
   unidad: "t" | "h"
   tarifa: number
   valor: number
+  /** Lote de producción (AAAAMMDD) que respalda esta línea -- Indupan/Tolva
+   *  únicamente. `fecha` ya sale de este lote (no de una orden), pero se deja
+   *  el código crudo visible para que el anexo sea auditable. null en Avimol
+   *  (no cambia; ese proyecto no factura por lote individual). */
+  lote: string | null
 }
 
 export interface PrefacturaProduccionData {
@@ -156,6 +160,7 @@ async function armarAvimol(desde: string, hasta: string) {
         unidad: "t",
         tarifa: p.tarifa,
         valor: p.cobro,
+        lote: null, // Avimol no factura por lote individual -- sin cambio de comportamiento.
       })
     }
     for (const h of d.detalleHorasExtra) {
@@ -175,6 +180,7 @@ async function armarAvimol(desde: string, hasta: string) {
         kg: null,
         cantidad: h.horas,
         unidad: "h",
+        lote: null,
         tarifa: h.tarifa,
         valor: h.cobro,
       })
@@ -209,12 +215,43 @@ async function armarAvimol(desde: string, hasta: string) {
   }
 }
 
+/** Parseo lote (AAAAMMDD) -> fecha ISO. Mismo guard que
+ *  lib/conciliacion-avimol-actions.ts:88-98 (el lote se puede escribir a
+ *  mano, así que puede no ser una fecha válida). */
+function loteAFechaIndupan(lote: any): string | null {
+  const s = String(lote || "").trim()
+  if (!/^\d{8}$/.test(s)) return null
+  const y = Number(s.slice(0, 4))
+  const m = Number(s.slice(4, 6))
+  const d = Number(s.slice(6, 8))
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null
+  const dt = new Date(y, m - 1, d)
+  if (isNaN(dt.getTime()) || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+}
+
+/** Mismo comodín que liquidacion-tolva-actions.ts / conciliacion-avimol-actions.ts
+ *  — tolera la tilde de "producción". */
+const ORIGEN_INGRESO_PRODUCCION_INDUPAN = "%ingreso producci%"
+
 /**
- * INDUPAN — órdenes de `cabeceraoc` con tipooperacion Tolva / Tolva f.
- * Mismo criterio de "procesada" que usa la prefactura del Cuadro de Control:
- * la orden cuenta solo si tiene `fincargue` y no está marcada `facturar = false`
- * (ver lib/facturacion-control-actions.ts). Paginado: sin él, un rango amplio
- * se truncaría en 1000 filas y la prefactura saldría corta EN SILENCIO.
+ * INDUPAN — producción de Tolva / Tolva f.
+ *
+ * FUENTE: Aprobación de Ingreso de Producción (`invtrans`, tipomov='Entrada',
+ * status='Aprobado', origen='ingreso producción') — NO `cabeceraoc.pesovascula`.
+ * Para Tolva ese campo nunca fue una báscula real: Liquidación Tolva lo llena
+ * con el mismo total que ya viene de aquí (lib/liquidacion-tolva-actions.ts),
+ * así que ir a la fuente es más preciso, no menos.
+ *
+ * SEGREGACIÓN: por fecha del LOTE (AAAAMMDD), no por la orden de Liquidación
+ * Tolva que recogió la producción. El cliente (Harinera Indupan) hace corte
+ * ~3:00pm: una misma orden de liquidación (y un mismo día calendario) puede
+ * traer producción de DOS lotes/fechas distintas (turno que cruza el corte).
+ * Mismo patrón ya validado en Avimol (lib/conciliacion-avimol-actions.ts,
+ * armarAvimol) — aquí se replica exactamente para Indupan/Tolva.
+ *
+ * Tolva vs Tolva f: domingo de la fecha del LOTE (mismo criterio que
+ * `tipoOperacionTolva` en lib/liquidacion-tolva-actions.ts).
  */
 async function armarIndupan(desde: string, hasta: string) {
   const admin: any = await getSupabaseAdmin()
@@ -238,56 +275,118 @@ async function armarIndupan(desde: string, hasta: string) {
     return fila ? num(fila.tarifa) : 0
   }
 
-  const ordenes: any[] = []
+  const alertas: AlertaAvimol[] = []
+
+  // Confirmado con el negocio 2026-09-16: estos productos pasan por Aprobación
+  // de Ingreso de Producción pero NO son Tolva -- son subproducto de la
+  // molienda propia de Indupan (mogolla, salvado, harina de tercera) y una
+  // marca de otro cliente toll-milled en la planta ("La Nieve" en libras).
+  // EXCLUSIÓN TEMPORAL "hasta nueva orden" -- si el negocio confirma que sí
+  // se deben facturar, quitar este filtro (no la lógica de arriba).
+  const PRODUCTOS_NO_TOLVA_INDUPAN = new Set(["Mogolla Kg.", "PT LA NIEVE 25LB", "Harina de Tercera", "Salvado Kg."])
+
+  // Ingresos aprobados, filtrados por LOTE (AAAAMMDD ordena igual lexicográfica
+  // que cronológicamente, así que el rango se filtra directo en la BD y de
+  // paso deja fuera los lotes que no son fecha).
+  const loteDesde = desde.replace(/-/g, "")
+  const loteHasta = hasta.replace(/-/g, "")
+  const ingresosCrudos: any[] = []
   for (let off = 0; ; off += 1000) {
     const { data, error } = await admin
-      .from("cabeceraoc")
-      .select("ordendecargue, fechacargue, tipooperacion, pesovascula, fincargue, facturar")
+      .from("invtrans")
+      .select("id, idproducto, nombreproducto, cantidad, lote, fechaprod, creadopor")
       .eq("idempresa", INDUPAN)
-      .gte("fechacargue", desde)
-      .lte("fechacargue", hasta)
-      .order("fechacargue", { ascending: true })
+      .eq("tipomov", "Entrada")
+      .eq("status", "Aprobado")
+      .ilike("origen", ORIGEN_INGRESO_PRODUCCION_INDUPAN)
+      .gte("lote", loteDesde)
+      .lte("lote", loteHasta)
       .range(off, off + 999)
     if (error) throw new Error(error.message)
-    ordenes.push(...(data || []))
-    if (!data || data.length < 1000) break
+    if (!data || data.length === 0) break
+    ingresosCrudos.push(...data)
+    if (data.length < 1000) break
   }
-
-  const opsNorm = new Set(OPS_INDUPAN.map(normOp))
-  const facturables = ordenes.filter(
-    (o: any) => opsNorm.has(normOp(o.tipooperacion)) && o.fincargue && o.facturar !== false && num(o.pesovascula) > 0,
+  // Confirmado con el negocio 2026-09-16: Tolva la produce el LOGO. Lo que
+  // entra manual ("transacción manual" / usuario humano en `creadopor`) son
+  // devoluciones o descargues que se aprueban por el mismo módulo pero no
+  // son producción de Tolva -- se verificó con un caso real (5 transacciones
+  // del 17-ago, creadas semanas después por "Coordinador Indupan", con
+  // `fechaprod` que ni siquiera coincidía con el lote).
+  const ingresos = ingresosCrudos.filter(
+    (r: any) => r.creadopor === "LOGO" && !PRODUCTOS_NO_TOLVA_INDUPAN.has(String(r.nombreproducto || "")),
   )
 
-  // DETALLE DE PRODUCTOS. El soporte tiene que mostrar de dónde salen las
-  // toneladas, porque el producto se maneja en BULTOS y se nombra en kilos
-  // ("Indupan Especial 50 Kg."), pero la TARIFA es por TONELADA. Sin esto el
-  // anexo solo diría "Tolva6586 = 73,9 t" sin explicar el 1.478 × 50 kg.
-  const detPorOrden = new Map<string, any[]>()
-  const codigos = facturables.map((o: any) => String(o.ordendecargue || "").trim()).filter(Boolean)
-  for (let i = 0; i < codigos.length; i += 100) {
+  // Ingresos aprobados del rango cuyo LOTE no es una fecha parseable: el
+  // filtro de arriba los deja fuera, así que se buscan por `fechaprod` para
+  // que no queden invisibles (no suman al cobro, solo se alertan). Mismo
+  // filtro LOGO + exclusión de productos que `ingresos` -- si no, cualquier
+  // devolución/descargue manual con lote roto dispararía una alerta de algo
+  // que de todas formas nunca se iba a facturar.
+  {
     const { data } = await admin
-      .from("detalleoc")
-      .select("numeroorden, producto, cantidad, toneladas")
-      .in("numeroorden", codigos.slice(i, i + 100))
-    for (const d of data || []) {
-      const k = String(d.numeroorden || "").trim()
-      if (!detPorOrden.has(k)) detPorOrden.set(k, [])
-      detPorOrden.get(k)!.push(d)
+      .from("invtrans")
+      .select("id, nombreproducto, lote, fechaprod, creadopor")
+      .eq("idempresa", INDUPAN)
+      .eq("tipomov", "Entrada")
+      .eq("status", "Aprobado")
+      .ilike("origen", ORIGEN_INGRESO_PRODUCCION_INDUPAN)
+      .eq("creadopor", "LOGO")
+      .gte("fechaprod", desde)
+      .lte("fechaprod", hasta)
+      .range(0, 999)
+    for (const r of data || []) {
+      if (PRODUCTOS_NO_TOLVA_INDUPAN.has(String(r.nombreproducto || ""))) continue
+      if (loteAFechaIndupan(r.lote) === null) {
+        alertas.push({
+          tipo: "lote_invalido",
+          detalle: `Ingreso #${r.id} (${r.nombreproducto || "sin producto"}) con lote "${r.lote ?? ""}" no es una fecha AAAAMMDD — no se factura. Producción: ${String(r.fechaprod ?? "").slice(0, 10) || "—"}.`,
+        })
+      }
     }
   }
 
+  // Peso unitario por producto (kg/bulto) — el producto se maneja en BULTOS
+  // y se nombra en kilos ("Indupan Especial 50 Kg."), pero la TARIFA es por
+  // TONELADA.
+  const idsProducto = Array.from(
+    new Set(ingresos.map((r: any) => r.idproducto).filter((x: any) => x != null).map((x: any) => Number(x))),
+  )
+  const pesoPorProducto = new Map<number, number>()
+  for (let i = 0; i < idsProducto.length; i += 100) {
+    const chunk = idsProducto.slice(i, i + 100)
+    const { data } = await admin.from("productos").select("id, peso_unitkg").in("id", chunk)
+    for (const p of data || []) pesoPorProducto.set(Number(p.id), num(p.peso_unitkg))
+  }
+
   const porOp = new Map<string, { cantidad: number; total: number; tarifa: number; sinTarifa: boolean }>()
-  const soporte: SoporteProduccion[] = []
-  const alertas: AlertaAvimol[] = []
+  // Agregado por (lote, producto): cada ingreso individual es UNA lectura de
+  // báscula/QR (puede haber decenas por lote), así que sin agregar aquí el
+  // soporte queda con filas repetidas idénticas -- mismo patrón de
+  // `dia.productos` en conciliacion-avimol-actions.ts (líneas ~520-530).
+  const porLoteProducto = new Map<string, SoporteProduccion>()
   const sinTarifaSet = new Set<string>()
 
-  for (const o of facturables) {
-    const fecha = String(o.fechacargue).slice(0, 10)
-    const ton = num(o.pesovascula) // la BÁSCULA es la fuente de verdad del cobro
+  for (const r of ingresos) {
+    const fecha = loteAFechaIndupan(r.lote)
+    if (!fecha) {
+      alertas.push({
+        tipo: "lote_invalido",
+        detalle: `Ingreso #${r.id} (${r.nombreproducto || "sin producto"}) con lote "${r.lote ?? ""}" no parseable — excluido del cobro.`,
+      })
+      continue
+    }
 
-    // Se cobra con el nombre de operación tal como está en la tarifa, para que
-    // el concepto del documento coincida con el maestro.
-    const opTarifa = OPS_INDUPAN.find((x) => normOp(x) === normOp(o.tipooperacion)) || String(o.tipooperacion)
+    const peso = r.idproducto != null ? pesoPorProducto.get(Number(r.idproducto)) || 0 : 0
+    const bultos = num(r.cantidad)
+    const kg = bultos * peso
+    const ton = kg / 1000
+    if (ton <= 0) continue
+
+    const [y, m, d] = fecha.split("-").map(Number)
+    const esDomingo = new Date(y, m - 1, d).getDay() === 0
+    const opTarifa = esDomingo ? "Tolva f" : "Tolva"
+
     const tarifa = tarifaVigente(opTarifa, fecha)
     if (tarifa === 0) sinTarifaSet.add(`${opTarifa}|${fecha}`)
     const valor = ton * tarifa
@@ -299,51 +398,38 @@ async function armarIndupan(desde: string, hasta: string) {
     else g.sinTarifa = true
     porOp.set(opTarifa, g)
 
-    const orden = String(o.ordendecargue || "").trim()
-    const lineas = detPorOrden.get(orden) || []
-    const sumaDetalle = lineas.reduce((a: number, l: any) => a + num(l.toneladas), 0)
-
-    if (lineas.length === 0 || sumaDetalle <= 0) {
-      // Sin detalle utilizable: se soporta la orden completa con el peso de báscula.
-      soporte.push({
+    const nombre = String(r.nombreproducto || "(sin producto)")
+    const k = `${r.lote}|${nombre}`
+    const existente = porLoteProducto.get(k)
+    if (existente) {
+      existente.bultos = (existente.bultos ?? 0) + bultos
+      existente.kg = (existente.kg ?? 0) + kg
+      existente.cantidad += ton
+      existente.valor += valor
+    } else {
+      porLoteProducto.set(k, {
         fecha,
         concepto: opTarifa,
-        detalle: orden,
-        referencia: orden,
-        bultos: null,
-        kg: null,
+        detalle: nombre,
+        referencia: null, // ya no hay una "orden" por línea -- se factura por lote, ver `lote`
+        bultos,
+        kg,
         cantidad: ton,
         unidad: "t",
         tarifa,
         valor,
-      })
-      continue
-    }
-
-    // PRORRATEO a la báscula: si el detalle no suma exactamente lo pesado, se
-    // ajusta para que el soporte cuadre con lo facturado al peso. Mismo criterio
-    // que la prefactura del Cuadro de Control.
-    const factor = ton / sumaDetalle
-    for (const l of lineas) {
-      const tonLinea = num(l.toneladas) * factor
-      if (tonLinea <= 0) continue
-      const bultos = num(l.cantidad)
-      soporte.push({
-        fecha,
-        concepto: opTarifa,
-        detalle: String(l.producto || "(sin producto)"),
-        referencia: orden,
-        bultos,
-        // Kg reconstruido desde las toneladas ya prorrateadas: así el anexo
-        // muestra la cadena completa bultos -> kg -> toneladas -> valor.
-        kg: Number((tonLinea * 1000).toFixed(1)),
-        cantidad: Number(tonLinea.toFixed(3)),
-        unidad: "t",
-        tarifa,
-        valor: tonLinea * tarifa,
+        lote: r.lote,
       })
     }
   }
+
+  const soporte: SoporteProduccion[] = Array.from(porLoteProducto.values()).map((s) => ({
+    ...s,
+    bultos: s.bultos != null ? Number(s.bultos.toFixed(0)) : null,
+    kg: s.kg != null ? Number(s.kg.toFixed(1)) : null,
+    cantidad: Number(s.cantidad.toFixed(3)),
+    valor: Math.round(s.valor),
+  }))
 
   for (const k of sinTarifaSet) {
     const [op, f] = k.split("|")
