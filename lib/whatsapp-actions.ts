@@ -149,7 +149,16 @@ export async function getPlantillas(): Promise<{
  */
 export async function getPlantillasDeMeta(): Promise<{
   success: boolean
-  data?: { nombre: string; idioma: string; estado: string; categoria: string }[]
+  data?: {
+    nombre: string
+    idioma: string
+    estado: string
+    categoria: string
+    /** true = la plantilla usa {{nombre}}; false = {{1}},{{2}} posicionales. */
+    conNombre: boolean
+    varsHeader: string[]
+    varsBody: string[]
+  }[]
   message?: string
 }> {
   const token = process.env.WHATSAPP_TOKEN
@@ -159,19 +168,37 @@ export async function getPlantillasDeMeta(): Promise<{
   }
   try {
     const r = await fetch(
-      `https://graph.facebook.com/${API_VERSION}/${wabaId}/message_templates?fields=name,language,status,category&limit=100`,
+      `https://graph.facebook.com/${API_VERSION}/${wabaId}/message_templates?fields=name,language,status,category,components&limit=100`,
       { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
     )
     const j = await r.json()
     if (!r.ok) return { success: false, message: j?.error?.message ?? `Meta respondió ${r.status}.` }
     return {
       success: true,
-      data: (j?.data ?? []).map((t: any) => ({
-        nombre: t.name,
-        idioma: t.language,
-        estado: t.status,
-        categoria: t.category,
-      })),
+      data: (j?.data ?? []).map((t: any) => {
+        // Meta admite dos formatos de variable y NO son intercambiables:
+        //   · posicional  {{1}}, {{2}}  -> parametros sin nombre
+        //   · con nombre  {{usuario}}   -> cada parametro lleva `parameter_name`
+        // Mandar el formato equivocado falla con "Parameter name is missing".
+        // Se detecta leyendo el texto real de la plantilla.
+        const comps = t.components ?? []
+        const header = comps.find((c: any) => c.type === "HEADER")
+        const body = comps.find((c: any) => c.type === "BODY")
+        const textos = [header?.text ?? "", body?.text ?? ""].join(" ")
+        // Si alguna variable tiene letras dentro de las llaves, es con nombre.
+        const conNombre = /\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(textos)
+        const extraer = (txt: string): string[] =>
+          [...String(txt ?? "").matchAll(/\{\{\s*([^}\s]+)\s*\}\}/g)].map((m) => m[1])
+        return {
+          nombre: t.name,
+          idioma: t.language,
+          estado: t.status,
+          categoria: t.category,
+          conNombre,
+          varsHeader: extraer(header?.text ?? ""),
+          varsBody: extraer(body?.text ?? ""),
+        }
+      }),
     }
   } catch (e: any) {
     return { success: false, message: e?.message || "No se pudo consultar a Meta." }
@@ -207,17 +234,30 @@ export async function enviarPlantilla(input: EnviarPlantillaInput): Promise<Resu
   // Los componentes van en el orden que espera Meta. Cada valor ocupa una
   // posición: {{1}}, {{2}}... Si el orden no coincide con el de la plantilla
   // aprobada, el mensaje sale con los valores cruzados y NO da error.
+  //
+  // Meta admite DOS formatos de variable y no son intercambiables:
+  //   · posicional  {{1}}, {{2}}  -> {type:"text", text:"..."}
+  //   · con nombre  {{usuario}}   -> {type:"text", parameter_name:"usuario", text:"..."}
+  //
+  // Mandar el formato equivocado falla con "Parameter name is missing or empty"
+  // (codigo 100), que no dice cual es el problema real. `nombresHeader` y
+  // `nombresBody` llegan cuando la plantilla usa variables con nombre.
+  const param = (valor: string, nombre?: string) =>
+    nombre
+      ? { type: "text", parameter_name: nombre, text: String(valor ?? "") }
+      : { type: "text", text: String(valor ?? "") }
+
   const componentes: any[] = []
   if (input.header?.length) {
     componentes.push({
       type: "header",
-      parameters: input.header.map((v) => ({ type: "text", text: String(v ?? "") })),
+      parameters: input.header.map((v, i) => param(v, input.nombresHeader?.[i])),
     })
   }
   if (input.body?.length) {
     componentes.push({
       type: "body",
-      parameters: input.body.map((v) => ({ type: "text", text: String(v ?? "") })),
+      parameters: input.body.map((v, i) => param(v, input.nombresBody?.[i])),
     })
   }
 
@@ -268,6 +308,9 @@ export async function enviarPlantilla(input: EnviarPlantillaInput): Promise<Resu
       // lee como si faltara la plantilla. Casi siempre existe pero en OTRO
       // idioma: Meta trata "es" y "es_CO" como distintos. Se traduce para no
       // mandar a nadie a buscar una plantilla que ya está creada.
+      if (String(err.code) === "100" && /parameter name/i.test(String(msg))) {
+        msg = `La plantilla "${input.plantilla}" usa variables CON NOMBRE ({{usuario}}) y se enviaron sin nombre. Vuelve a abrir la pantalla para que lea la estructura actualizada de Meta. Detalle: ${msg}`
+      }
       if (String(err.code) === "132001") {
         msg = `La plantilla "${input.plantilla}" no existe en el idioma "${input.idioma || "es"}". Suele estar aprobada en otro idioma (por ejemplo es_CO): revisa el idioma exacto en WhatsApp Manager y ajústalo. Detalle de Meta: ${msg}`
       }

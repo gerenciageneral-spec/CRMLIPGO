@@ -58,6 +58,12 @@ export interface EnviarPlantillaInput {
   header?: string[]
   /** Valores del cuerpo, en orden. */
   body?: string[]
+  /**
+   * Nombres de las variables, cuando la plantilla usa {{nombre}} en vez de
+   * {{1}}. Si vienen, cada parametro viaja con su `parameter_name`.
+   */
+  nombresHeader?: string[]
+  nombresBody?: string[]
   /** Qué flujo lo dispara. Sirve para medir volumen y costo. */
   origen?: string
   identificacion?: string | null

@@ -53,7 +53,16 @@ export default function WhatsappConfig() {
 
   const [estado, setEstado] = useState<EstadoConfigWhatsapp | null>(null)
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[]>([])
-  const [enMeta, setEnMeta] = useState<{ nombre: string; idioma: string; estado: string }[]>([])
+  const [enMeta, setEnMeta] = useState<
+    {
+      nombre: string
+      idioma: string
+      estado: string
+      conNombre: boolean
+      varsHeader: string[]
+      varsBody: string[]
+    }[]
+  >([])
   const [mensajes, setMensajes] = useState<MensajeWhatsapp[]>([])
   const [faltaMigracion, setFaltaMigracion] = useState(false)
   const [cargando, setCargando] = useState(true)
@@ -116,11 +125,22 @@ export default function WhatsappConfig() {
   const idiomaNoCoincide =
     versionesEnMeta.length > 0 && !versionesEnMeta.some((t) => t.idioma === idiomaEnvio)
 
+  // Variables efectivas: las de Meta si se pudieron leer, las registradas en
+  // LIPgo si no. Las de Meta mandan porque son las que la API va a exigir.
+  const varsHeader = estadoEnMeta?.varsHeader?.length
+    ? estadoEnMeta.varsHeader
+    : (plantilla?.variables.header ?? [])
+  const varsBody = estadoEnMeta?.varsBody?.length
+    ? estadoEnMeta.varsBody
+    : (plantilla?.variables.body ?? [])
+  // Si la plantilla usa {{nombre}}, cada parametro debe viajar con su nombre.
+  const conNombre = estadoEnMeta?.conNombre === true
+
   async function probar() {
     if (!telefono.trim() || !plantilla) return
     setEnviando(true)
-    const header = (plantilla.variables.header ?? []).map((v) => valores[`h_${v}`] ?? "")
-    const body = (plantilla.variables.body ?? []).map((v) => valores[`b_${v}`] ?? "")
+    const header = varsHeader.map((v) => valores[`h_${v}`] ?? "")
+    const body = varsBody.map((v) => valores[`b_${v}`] ?? "")
     const r = await enviarPlantilla({
       empresaId: selectedEmpresaId ?? null,
       telefono: telefono.trim(),
@@ -128,6 +148,10 @@ export default function WhatsappConfig() {
       idioma: idiomaEnvio || plantilla.idioma,
       header,
       body,
+      // Solo cuando la plantilla las usa: mandar `parameter_name` a una
+      // plantilla posicional tambien falla.
+      nombresHeader: conNombre ? varsHeader : undefined,
+      nombresBody: conNombre ? varsBody : undefined,
       origen: "prueba",
     })
     setEnviando(false)
@@ -313,7 +337,8 @@ export default function WhatsappConfig() {
                   style={{ color: estadoEnMeta.estado === "APPROVED" ? "#059669" : "#ea580c" }}
                 >
                   En Meta: {estadoEnMeta.estado === "APPROVED" ? "aprobada" : estadoEnMeta.estado} ·
-                  idioma <strong>{estadoEnMeta.idioma}</strong>
+                  idioma <strong>{estadoEnMeta.idioma}</strong> ·
+                  variables {estadoEnMeta.conNombre ? "con nombre" : "posicionales"}
                   {estadoEnMeta.estado !== "APPROVED" && " — todavía no se puede enviar"}
                 </p>
               ) : estado?.configurado && plantillaSel ? (
@@ -362,11 +387,16 @@ export default function WhatsappConfig() {
 
             {plantilla && (
               <>
-                {(plantilla.variables.header ?? []).map((v, i) => (
+                {/* Las variables salen de la ESTRUCTURA REAL de Meta cuando se
+                    puede leer: es la que decide si el envio funciona. El
+                    registro local solo sirve de respaldo. */}
+                {varsHeader.map((v, i) => (
                   <div key={`h${i}`}>
                     <Label className="text-xs">
                       Encabezado · {v}{" "}
-                      <span className="text-muted-foreground">{`{{${i + 1}}}`}</span>
+                      <span className="text-muted-foreground">
+                        {conNombre ? `{{${v}}}` : `{{${i + 1}}}`}
+                      </span>
                     </Label>
                     <Input
                       value={valores[`h_${v}`] ?? ""}
@@ -375,10 +405,13 @@ export default function WhatsappConfig() {
                     />
                   </div>
                 ))}
-                {(plantilla.variables.body ?? []).map((v, i) => (
+                {varsBody.map((v, i) => (
                   <div key={`b${i}`}>
                     <Label className="text-xs">
-                      Cuerpo · {v} <span className="text-muted-foreground">{`{{${i + 1}}}`}</span>
+                      Cuerpo · {v}{" "}
+                      <span className="text-muted-foreground">
+                        {conNombre ? `{{${v}}}` : `{{${i + 1}}}`}
+                      </span>
                     </Label>
                     <Input
                       value={valores[`b_${v}`] ?? ""}
