@@ -533,6 +533,15 @@ export const groups: Group[] = [
     icon: Settings,
     subgroups: [
       {
+        title: "Integraciones",
+        modules: [
+          // Mensajeria por WhatsApp Business. El token vive en variables de
+          // entorno, no en la base: quien lo tenga puede escribirle a
+          // cualquiera en nombre de la empresa.
+          { name: "WhatsApp", icon: Send, label: "Mensajería WhatsApp" },
+        ],
+      },
+      {
         title: "Gestión de Clientes",
         modules: [
           { name: "Clientes", icon: Users },

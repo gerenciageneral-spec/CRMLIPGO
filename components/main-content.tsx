@@ -105,6 +105,7 @@ import CapacitacionesAsistencia from "@/components/rrhh/capacitaciones-asistenci
 // mensual estimado con los porcentajes reales de prestaciones y parafiscales.
 import RequisicionPersonal from "@/components/rrhh/requisicion-personal"
 import ProcesosDisciplinarios from "@/components/rrhh/procesos-disciplinarios"
+import WhatsappConfig from "@/components/configuration/whatsapp-config"
 import EvaluacionesDashboard from "@/components/rrhh/evaluaciones-dashboard"
 import InduccionesEvidenciaDashboard from "@/components/rrhh/inducciones-evidencia-dashboard"
 import InduccionesManagement from "@/components/rrhh/inducciones-management"
@@ -311,6 +312,7 @@ export function MainContent({
       "Gestión de Capacitaciones": "capacitaciones",
       "Asistencia a Capacitaciones": "asistencia_capacitaciones",
       "Operación del día": "operacion_dia",
+      WhatsApp: "whatsapp",
       "Solicitud de Personal": "solicitud_personal",
       "Evaluaciones de Desempeño": "evaluacionpersonal",
       "Gestión de Solicitudes": "gestionsolicitudes",
@@ -707,6 +709,10 @@ export function MainContent({
 ) : selectedModule === "Procesos Disciplinarios" ? (
   <PermissionGuard moduleName="Procesos Disciplinarios">
     <ProcesosDisciplinarios />
+  </PermissionGuard>
+) : selectedModule === "WhatsApp" ? (
+  <PermissionGuard moduleName="WhatsApp">
+    <WhatsappConfig />
   </PermissionGuard>
 ) : selectedModule === "Carpetas de Trabajadores" ? (
   <PermissionGuard moduleName="Carpetas de Trabajadores">
