@@ -294,7 +294,7 @@ async function armarIndupan(desde: string, hasta: string) {
   for (let off = 0; ; off += 1000) {
     const { data, error } = await admin
       .from("invtrans")
-      .select("id, idproducto, nombreproducto, cantidad, lote, fechaprod, creadopor")
+      .select("id, idproducto, nombreproducto, cantidad, lote, fechaprod, creadopor, tipo_produccion, observaciones")
       .eq("idempresa", INDUPAN)
       .eq("tipomov", "Entrada")
       .eq("status", "Aprobado")
@@ -307,14 +307,26 @@ async function armarIndupan(desde: string, hasta: string) {
     ingresosCrudos.push(...data)
     if (data.length < 1000) break
   }
-  // Confirmado con el negocio 2026-09-16: Tolva la produce el LOGO. Lo que
+  // Confirmado con el negocio 2026-09-16/17: Tolva la produce el LOGO. Lo que
   // entra manual ("transacción manual" / usuario humano en `creadopor`) son
   // devoluciones o descargues que se aprueban por el mismo módulo pero no
   // son producción de Tolva -- se verificó con un caso real (5 transacciones
   // del 17-ago, creadas semanas después por "Coordinador Indupan", con
   // `fechaprod` que ni siquiera coincidía con el lote).
+  // `tipo_produccion = 'Harinera'` -- producción PROPIA que genera inventario
+  // pero NO se cobra (mismo criterio ya validado en Avimol, ver
+  // EXCLUIR_HARINERA en lib/conciliacion-avimol-actions.ts). Verificado con
+  // datos reales: incluye devoluciones/descargues explícitos (observaciones
+  // "Descargue de material") pero TAMBIÉN lotes grandes de productos núcleo
+  // (700 bultos de Indupan Premium 50 Kg. en un solo movimiento, sin turno
+  // real detrás) -- por eso este filtro reemplaza a la lista fija de 4
+  // productos de abajo como criterio principal; la lista se conserva como
+  // respaldo por si algún caso no trae `tipo_produccion` marcado.
   const ingresos = ingresosCrudos.filter(
-    (r: any) => r.creadopor === "LOGO" && !PRODUCTOS_NO_TOLVA_INDUPAN.has(String(r.nombreproducto || "")),
+    (r: any) =>
+      r.creadopor === "LOGO" &&
+      r.tipo_produccion !== "Harinera" &&
+      !PRODUCTOS_NO_TOLVA_INDUPAN.has(String(r.nombreproducto || "")),
   )
 
   // Ingresos aprobados del rango cuyo LOTE no es una fecha parseable: el
@@ -326,7 +338,7 @@ async function armarIndupan(desde: string, hasta: string) {
   {
     const { data } = await admin
       .from("invtrans")
-      .select("id, nombreproducto, lote, fechaprod, creadopor")
+      .select("id, nombreproducto, lote, fechaprod, creadopor, tipo_produccion")
       .eq("idempresa", INDUPAN)
       .eq("tipomov", "Entrada")
       .eq("status", "Aprobado")
@@ -336,6 +348,7 @@ async function armarIndupan(desde: string, hasta: string) {
       .lte("fechaprod", hasta)
       .range(0, 999)
     for (const r of data || []) {
+      if (r.tipo_produccion === "Harinera") continue
       if (PRODUCTOS_NO_TOLVA_INDUPAN.has(String(r.nombreproducto || ""))) continue
       if (loteAFechaIndupan(r.lote) === null) {
         alertas.push({
