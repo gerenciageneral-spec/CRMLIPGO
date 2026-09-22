@@ -1,0 +1,467 @@
+"use server"
+
+// Prospectos: el embudo comercial.
+//
+// Convencion del proyecto, heredada de LIPgo y conservada a proposito:
+//   - "use server" + solo funciones async (los tipos viven en crm-prospectos.ts)
+//   - envelope { success, data?, error? }, nunca throw
+//   - empresaId explicito en cada funcion, aunque hoy siempre valga 1
+//   - try/catch en todas: un error de red no puede tumbar la pantalla
+
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { hoyISO } from "@/lib/crm-fechas"
+import type {
+  Prospecto, ProspectoInteres, Actividad, Etapa, ProspectoConEtapa,
+  NuevoProspecto, ResumenEmbudo,
+} from "@/lib/crm-prospectos"
+
+export interface ActionResult<T = unknown> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
+function fallo(err: unknown): ActionResult<never> {
+  const msg = err instanceof Error ? err.message : "Error desconocido"
+  console.error("[crm-prospectos]", msg)
+  return { success: false, error: msg }
+}
+
+// ---------------------------------------------------------------- Etapas
+
+export async function getEtapas(empresaId = 1): Promise<ActionResult<Etapa[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from("crm_etapas")
+      .select("*")
+      .eq("idempresa", empresaId)
+      .eq("activo", true)
+      .order("orden")
+
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: (data ?? []) as Etapa[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+// ------------------------------------------------------------ Prospectos
+
+export async function getProspectos(
+  empresaId = 1,
+  filtros?: { etapaId?: number; vendedorId?: number; busqueda?: string; soloActivos?: boolean },
+): Promise<ActionResult<ProspectoConEtapa[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+
+    // El join con crm_etapas trae nombre y probabilidad en la misma consulta:
+    // el embudo los necesita en cada tarjeta y pedirlos aparte serian N+1.
+    let q = supabase
+      .from("crm_prospectos")
+      .select("*, etapa:crm_etapas(id, nombre, orden, probabilidad, color, es_ganada, es_perdida)")
+      .eq("idempresa", empresaId)
+
+    if (filtros?.soloActivos !== false) q = q.eq("activo", true)
+    if (filtros?.etapaId) q = q.eq("etapa_id", filtros.etapaId)
+    if (filtros?.vendedorId) q = q.eq("vendedor_id", filtros.vendedorId)
+    if (filtros?.busqueda) {
+      const t = filtros.busqueda.trim()
+      q = q.or(`razon_social.ilike.%${t}%,nombre_comercial.ilike.%${t}%,documento.ilike.%${t}%,codigo.ilike.%${t}%`)
+    }
+
+    const { data, error } = await q.order("actualizado_en", { ascending: false }).limit(500)
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: (data ?? []) as ProspectoConEtapa[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+export async function getProspecto(id: number, empresaId = 1): Promise<ActionResult<ProspectoConEtapa>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from("crm_prospectos")
+      .select("*, etapa:crm_etapas(id, nombre, orden, probabilidad, color, es_ganada, es_perdida)")
+      .eq("id", id)
+      .eq("idempresa", empresaId)
+      .maybeSingle()
+
+    if (error) return { success: false, error: error.message }
+    if (!data) return { success: false, error: "El prospecto no existe" }
+    return { success: true, data: data as ProspectoConEtapa }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+export async function crearProspecto(
+  entrada: NuevoProspecto,
+  usuario: string,
+  empresaId = 1,
+): Promise<ActionResult<Prospecto>> {
+  try {
+    if (!entrada.razon_social?.trim()) {
+      return { success: false, error: "La razón social es obligatoria" }
+    }
+
+    const supabase = await getSupabaseAdmin()
+
+    // Si no viene etapa, arranca en la primera del embudo.
+    let etapaId = entrada.etapa_id
+    if (!etapaId) {
+      const { data: primera } = await supabase
+        .from("crm_etapas")
+        .select("id")
+        .eq("idempresa", empresaId)
+        .eq("activo", true)
+        .order("orden")
+        .limit(1)
+        .maybeSingle()
+      etapaId = primera?.id
+    }
+    if (!etapaId) return { success: false, error: "No hay etapas configuradas en el embudo" }
+
+    const { interes, ...cabecera } = entrada
+
+    // El codigo lo asigna un trigger (PROS-2026-0001), por eso no se manda.
+    const { data, error } = await supabase
+      .from("crm_prospectos")
+      .insert({
+        ...cabecera,
+        idempresa: empresaId,
+        etapa_id: etapaId,
+        // El GPS solo se sella si de verdad llego una coordenada.
+        gps_capturado_en: entrada.latitud != null ? new Date().toISOString() : null,
+        creado_por: usuario,
+      })
+      .select()
+      .single()
+
+    if (error) return { success: false, error: error.message }
+
+    // Productos de interes, si los hay.
+    if (interes?.length) {
+      const filas = interes
+        .filter((i) => i.producto_nombre?.trim())
+        .map((i) => ({ ...i, prospecto_id: data.id, idempresa: empresaId }))
+
+      if (filas.length) {
+        const { error: errInteres } = await supabase.from("crm_prospecto_interes").insert(filas)
+        // El interes no invalida el prospecto: se avisa, no se revierte.
+        if (errInteres) console.error("[crm-prospectos] interés:", errInteres.message)
+      }
+    }
+
+    // Si se agendo un proximo contacto, entra en la agenda.
+    if (entrada.proxima_fecha) {
+      await supabase.from("crm_agenda").insert({
+        idempresa: empresaId,
+        titulo: entrada.proxima_accion || `Contactar a ${entrada.razon_social}`,
+        tipo: "visita",
+        fecha: entrada.proxima_fecha,
+        hora_inicio: entrada.proxima_hora ?? null,
+        prospecto_id: data.id,
+        vendedor_id: entrada.vendedor_id ?? null,
+        direccion: entrada.direccion ?? null,
+        latitud: entrada.latitud ?? null,
+        longitud: entrada.longitud ?? null,
+        creado_por: usuario,
+      })
+    }
+
+    return { success: true, data: data as Prospecto }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+export async function actualizarProspecto(
+  id: number,
+  cambios: Partial<Prospecto>,
+  empresaId = 1,
+): Promise<ActionResult<Prospecto>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+
+    // La empresa y el codigo no se tocan desde la interfaz: mover un prospecto
+    // de empresa o renumerarlo no es una edicion, es otra operacion.
+    const { idempresa, codigo, id: _, creado_en, creado_por, ...limpio } = cambios as any
+
+    const { data, error } = await supabase
+      .from("crm_prospectos")
+      .update(limpio)
+      .eq("id", id)
+      .eq("idempresa", empresaId)
+      .select()
+      .single()
+
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: data as Prospecto }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/**
+ * Mueve un prospecto de etapa (el arrastre del kanban).
+ *
+ * Deja rastro en la bitacora: el embudo sin historia no sirve para aprender
+ * por que se gana o se pierde.
+ */
+export async function moverEtapa(
+  id: number,
+  etapaId: number,
+  usuario: string,
+  empresaId = 1,
+  motivo?: string,
+): Promise<ActionResult<Prospecto>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+
+    const [{ data: actual }, { data: etapa }] = await Promise.all([
+      supabase.from("crm_prospectos")
+        .select("id, razon_social, etapa_id, etapa:crm_etapas(nombre)")
+        .eq("id", id).eq("idempresa", empresaId).maybeSingle(),
+      supabase.from("crm_etapas")
+        .select("id, nombre, es_ganada, es_perdida")
+        .eq("id", etapaId).maybeSingle(),
+    ])
+
+    if (!actual) return { success: false, error: "El prospecto no existe" }
+    if (!etapa) return { success: false, error: "La etapa no existe" }
+
+    const cambios: Record<string, unknown> = { etapa_id: etapaId }
+
+    // Al llegar a una etapa terminal se sella la fecha de cierre.
+    if (etapa.es_ganada || etapa.es_perdida) {
+      cambios.fecha_cierre = hoyISO()
+      if (etapa.es_perdida && motivo) cambios.motivo_perdida = motivo
+    } else {
+      // Si vuelve atras desde una terminal, se limpia el cierre.
+      cambios.fecha_cierre = null
+    }
+
+    const { data, error } = await supabase
+      .from("crm_prospectos")
+      .update(cambios)
+      .eq("id", id)
+      .eq("idempresa", empresaId)
+      .select()
+      .single()
+
+    if (error) return { success: false, error: error.message }
+
+    const etapaPrevia = (actual as any).etapa?.nombre ?? "etapa anterior"
+    await supabase.from("crm_actividades").insert({
+      idempresa: empresaId,
+      prospecto_id: id,
+      tipo: "nota",
+      asunto: `Cambio de etapa: ${etapaPrevia} → ${etapa.nombre}`,
+      detalle: motivo ?? null,
+      usuario,
+    })
+
+    return { success: true, data: data as Prospecto }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+// ------------------------------------------------------ Productos de interés
+
+export async function getInteres(prospectoId: number): Promise<ActionResult<ProspectoInteres[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from("crm_prospecto_interes")
+      .select("*")
+      .eq("prospecto_id", prospectoId)
+      .order("id")
+
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: (data ?? []) as ProspectoInteres[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+export async function guardarInteres(
+  prospectoId: number,
+  lineas: Omit<ProspectoInteres, "id" | "prospecto_id" | "idempresa" | "creado_en">[],
+  empresaId = 1,
+): Promise<ActionResult<ProspectoInteres[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+
+    // Se reemplaza el conjunto completo: son pocas lineas y comparar cual
+    // cambio no compensa la complejidad.
+    await supabase.from("crm_prospecto_interes").delete().eq("prospecto_id", prospectoId)
+
+    const filas = lineas
+      .filter((l) => l.producto_nombre?.trim())
+      .map((l) => ({ ...l, prospecto_id: prospectoId, idempresa: empresaId }))
+
+    if (!filas.length) return { success: true, data: [] }
+
+    const { data, error } = await supabase.from("crm_prospecto_interes").insert(filas).select()
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: (data ?? []) as ProspectoInteres[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+// ----------------------------------------------------------- Actividades
+
+export async function getActividades(
+  empresaId = 1,
+  filtros?: { prospectoId?: number; clienteId?: number; desde?: string; limite?: number },
+): Promise<ActionResult<Actividad[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+    let q = supabase.from("crm_actividades").select("*").eq("idempresa", empresaId)
+
+    if (filtros?.prospectoId) q = q.eq("prospecto_id", filtros.prospectoId)
+    if (filtros?.clienteId) q = q.eq("cliente_id", filtros.clienteId)
+    if (filtros?.desde) q = q.gte("fecha_hora", filtros.desde)
+
+    const { data, error } = await q
+      .order("fecha_hora", { ascending: false })
+      .limit(filtros?.limite ?? 100)
+
+    if (error) return { success: false, error: error.message }
+    return { success: true, data: (data ?? []) as Actividad[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+export async function registrarActividad(
+  actividad: Omit<Actividad, "id" | "creado_en">,
+  empresaId = 1,
+): Promise<ActionResult<Actividad>> {
+  try {
+    if (!actividad.prospecto_id && !actividad.cliente_id) {
+      return { success: false, error: "La actividad debe ir asociada a un prospecto o a un cliente" }
+    }
+    if (!actividad.asunto?.trim()) {
+      return { success: false, error: "El asunto es obligatorio" }
+    }
+
+    const supabase = await getSupabaseAdmin()
+    const { data, error } = await supabase
+      .from("crm_actividades")
+      .insert({ ...actividad, idempresa: empresaId })
+      .select()
+      .single()
+
+    if (error) return { success: false, error: error.message }
+
+    // Registrar actividad sobre un prospecto lo saca de "sin gestion": se
+    // refresca su marca de tiempo para que las alertas dejen de senalarlo.
+    if (actividad.prospecto_id) {
+      await supabase
+        .from("crm_prospectos")
+        .update({ actualizado_en: new Date().toISOString() })
+        .eq("id", actividad.prospecto_id)
+    }
+
+    return { success: true, data: data as Actividad }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+// --------------------------------------------------------------- Embudo
+
+/** Resumen por etapa: cuantos, cuanto valen y cuanto vale ponderado. */
+export async function getResumenEmbudo(empresaId = 1, vendedorId?: number): Promise<ActionResult<ResumenEmbudo>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+
+    const [etapasRes, prospectosRes] = await Promise.all([
+      supabase.from("crm_etapas").select("*").eq("idempresa", empresaId).eq("activo", true).order("orden"),
+      (() => {
+        let q = supabase
+          .from("crm_prospectos")
+          .select("id, etapa_id, valor_estimado, probabilidad_manual")
+          .eq("idempresa", empresaId)
+          .eq("activo", true)
+        if (vendedorId) q = q.eq("vendedor_id", vendedorId)
+        return q
+      })(),
+    ])
+
+    if (etapasRes.error) return { success: false, error: etapasRes.error.message }
+    if (prospectosRes.error) return { success: false, error: prospectosRes.error.message }
+
+    const etapas = (etapasRes.data ?? []) as Etapa[]
+    const prospectos = prospectosRes.data ?? []
+
+    const porEtapa = etapas.map((e) => {
+      const suyos = prospectos.filter((p: any) => p.etapa_id === e.id)
+      const valor = suyos.reduce((s: number, p: any) => s + Number(p.valor_estimado || 0), 0)
+      // La probabilidad del prospecto manda sobre la de su etapa: el vendedor
+      // puede saber algo que el embudo no.
+      const ponderado = suyos.reduce((s: number, p: any) => {
+        const prob = p.probabilidad_manual ?? e.probabilidad
+        return s + Number(p.valor_estimado || 0) * (Number(prob) / 100)
+      }, 0)
+
+      return {
+        etapa: e,
+        cantidad: suyos.length,
+        valor: Math.round(valor),
+        valorPonderado: Math.round(ponderado),
+      }
+    })
+
+    // Ganadas y perdidas no son "pipeline": ya no se van a cerrar.
+    const abiertas = porEtapa.filter((x) => !x.etapa.es_ganada && !x.etapa.es_perdida)
+
+    return {
+      success: true,
+      data: {
+        porEtapa,
+        totalProspectos: prospectos.length,
+        valorTotal: abiertas.reduce((s, x) => s + x.valor, 0),
+        valorPonderado: abiertas.reduce((s, x) => s + x.valorPonderado, 0),
+      },
+    }
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/** Prospectos con contacto pendiente: alimenta el tablero y la alerta. */
+export async function getProximosContactos(
+  empresaId = 1,
+  dias = 7,
+  vendedorId?: number,
+): Promise<ActionResult<ProspectoConEtapa[]>> {
+  try {
+    const supabase = await getSupabaseAdmin()
+    const hoy = hoyISO()
+    const hasta = new Date(Date.now() + dias * 86_400_000).toISOString().slice(0, 10)
+
+    let q = supabase
+      .from("crm_prospectos")
+      .select("*, etapa:crm_etapas(id, nombre, color)")
+      .eq("idempresa", empresaId)
+      .eq("activo", true)
+      .not("proxima_fecha", "is", null)
+      .lte("proxima_fecha", hasta)
+
+    if (vendedorId) q = q.eq("vendedor_id", vendedorId)
+
+    const { data, error } = await q.order("proxima_fecha")
+    if (error) return { success: false, error: error.message }
+
+    // Incluye los vencidos (fecha anterior a hoy): son los que mas urgen.
+    return { success: true, data: (data ?? []) as ProspectoConEtapa[] }
+  } catch (err) {
+    return fallo(err)
+  }
+}
