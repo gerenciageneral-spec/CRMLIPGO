@@ -1,0 +1,330 @@
+"use client"
+
+// Listado de cotizaciones y su ciclo: emitir, enviar, aceptar y convertir.
+
+import { useEffect, useMemo, useState } from "react"
+import {
+  Loader2, Plus, Search, FileText, Download, CheckCircle2, XCircle,
+  ArrowRight, Clock, AlertTriangle,
+} from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
+import {
+  getCotizaciones, cambiarEstadoCotizacion, convertirEnPedido, vencerCotizaciones,
+} from "@/lib/crm-cotizaciones-actions"
+import { generarPdfCotizacion } from "@/lib/crm-cotizacion-pdf"
+import {
+  ESTADO_COTIZACION_LABEL, money,
+  type CotizacionConDetalle, type EstadoCotizacion,
+} from "@/lib/crm-cotizaciones"
+import { hoyISO, diasEntre } from "@/lib/crm-fechas"
+import { CotizacionForm } from "./cotizacion-form"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Dialog, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "@/hooks/use-toast"
+
+const BADGE: Record<EstadoCotizacion, { variant: "default" | "secondary" | "outline" | "destructive"; clase?: string }> = {
+  borrador: { variant: "outline" },
+  enviada: { variant: "secondary" },
+  aceptada: { variant: "default", clase: "bg-[var(--chart-2)] hover:bg-[var(--chart-2)]" },
+  rechazada: { variant: "destructive" },
+  vencida: { variant: "outline", clase: "border-[var(--chart-3)] text-[var(--chart-3)]" },
+  convertida: { variant: "default" },
+}
+
+interface Props {
+  onNavigate?: (modulo: string) => void
+}
+
+export function CotizacionesPanel({ onNavigate }: Props) {
+  const { profile, selectedEmpresaId } = useAuth()
+  const empresaId = selectedEmpresaId ?? 1
+
+  const [cotizaciones, setCotizaciones] = useState<CotizacionConDetalle[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [busqueda, setBusqueda] = useState("")
+  const [filtroEstado, setFiltroEstado] = useState<string>("todas")
+  const [ocupado, setOcupado] = useState<number | null>(null)
+  const [dialogAbierto, setDialogAbierto] = useState(false)
+
+  const cargar = async () => {
+    // Se vencen antes de listar: así el estado es correcto aunque el cron
+    // diario no haya corrido todavía.
+    await vencerCotizaciones(empresaId)
+    const res = await getCotizaciones(empresaId)
+    if (res.success) setCotizaciones(res.data ?? [])
+    else toast({ title: "No se pudieron cargar", description: res.error, variant: "destructive" })
+    setCargando(false)
+  }
+
+  useEffect(() => {
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId])
+
+  const visibles = useMemo(() => {
+    const t = busqueda.trim().toLowerCase()
+    return cotizaciones.filter((c) => {
+      if (filtroEstado !== "todas" && c.estado !== filtroEstado) return false
+      if (!t) return true
+      return [c.numero, c.cliente_nombre, c.prospecto_nombre].some((x) => x?.toLowerCase().includes(t))
+    })
+  }, [cotizaciones, busqueda, filtroEstado])
+
+  const descargarPdf = async (c: CotizacionConDetalle) => {
+    setOcupado(c.id)
+    // Se regenera siempre: si la cotización se editó, el PDF guardado estaría
+    // desactualizado y nadie se enteraría hasta que el cliente lo reciba.
+    const res = await generarPdfCotizacion(c.id, empresaId)
+    setOcupado(null)
+
+    if (!res.success || !res.url) {
+      toast({ title: "No se generó el PDF", description: res.error, variant: "destructive" })
+      return
+    }
+    window.open(res.url, "_blank", "noopener,noreferrer")
+    setCotizaciones((prev) => prev.map((x) => (x.id === c.id ? { ...x, pdf_url: res.url! } : x)))
+  }
+
+  const cambiarEstado = async (c: CotizacionConDetalle, estado: EstadoCotizacion) => {
+    setOcupado(c.id)
+    const res = await cambiarEstadoCotizacion(c.id, estado, empresaId)
+    setOcupado(null)
+
+    if (!res.success) {
+      toast({ title: "No se pudo actualizar", description: res.error, variant: "destructive" })
+      return
+    }
+    setCotizaciones((prev) => prev.map((x) => (x.id === c.id ? { ...x, estado } : x)))
+    toast({ title: `Cotización ${ESTADO_COTIZACION_LABEL[estado].toLowerCase()}` })
+  }
+
+  const convertir = async (c: CotizacionConDetalle) => {
+    setOcupado(c.id)
+    const res = await convertirEnPedido(c.id, profile?.usuario ?? "desconocido", empresaId)
+    setOcupado(null)
+
+    if (!res.success) {
+      toast({ title: "No se pudo convertir", description: res.error, variant: "destructive" })
+      return
+    }
+
+    toast({
+      title: "Pedido creado",
+      description: `${res.data?.numero} · queda pendiente de autorización de contabilidad y gerencia`,
+    })
+    cargar()
+    onNavigate?.("Pedidos CRM")
+  }
+
+  return (
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Cotizaciones</h1>
+          <p className="text-sm text-muted-foreground">
+            {cotizaciones.length} emitida{cotizaciones.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Nueva cotización
+            </Button>
+          </DialogTrigger>
+          <CotizacionForm
+            empresaId={empresaId}
+            usuario={profile?.usuario ?? "desconocido"}
+            onGuardado={() => {
+              setDialogAbierto(false)
+              cargar()
+            }}
+          />
+        </Dialog>
+      </header>
+
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por número o cliente…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todos los estados</SelectItem>
+            {Object.entries(ESTADO_COTIZACION_LABEL).map(([k, v]) => (
+              <SelectItem key={k} value={k}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {cargando ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : visibles.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <FileText className="h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              {busqueda || filtroEstado !== "todas"
+                ? "Ninguna cotización coincide con el filtro."
+                : "Todavía no hay cotizaciones."}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Número</TableHead>
+                <TableHead>Para</TableHead>
+                <TableHead>Vigencia</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+
+            <TableBody>
+              {visibles.map((c) => (
+                <FilaCotizacion
+                  key={c.id}
+                  cotizacion={c}
+                  ocupado={ocupado === c.id}
+                  onPdf={() => descargarPdf(c)}
+                  onEstado={(e) => cambiarEstado(c, e)}
+                  onConvertir={() => convertir(c)}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function FilaCotizacion({
+  cotizacion: c, ocupado, onPdf, onEstado, onConvertir,
+}: {
+  cotizacion: CotizacionConDetalle
+  ocupado: boolean
+  onPdf: () => void
+  onEstado: (e: EstadoCotizacion) => void
+  onConvertir: () => void
+}) {
+  const diasRestantes = diasEntre(hoyISO(), c.fecha_vencimiento)
+  const vigente = diasRestantes >= 0
+  const porVencer = vigente && diasRestantes <= 3
+  const convertible = c.estado === "aceptada" && vigente && !c.crm_pedido_id
+  const badge = BADGE[c.estado]
+
+  return (
+    <TableRow>
+      <TableCell className="font-medium">
+        {c.numero}
+        {c.requiere_autorizacion_descuento && (
+          <AlertTriangle
+            className="ml-1.5 inline h-3.5 w-3.5 text-[var(--chart-3)]"
+            aria-label="Tiene descuento por encima del tope"
+          />
+        )}
+      </TableCell>
+
+      <TableCell className="max-w-[220px] truncate">
+        {c.cliente_nombre ?? c.prospecto_nombre ?? "—"}
+        {!c.cliente_id && c.prospecto_id && (
+          <span className="ml-1.5 text-xs text-muted-foreground">(prospecto)</span>
+        )}
+      </TableCell>
+
+      <TableCell>
+        <span className="text-sm">{c.fecha_vencimiento}</span>
+        {porVencer && (
+          <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-[var(--chart-3)]">
+            <Clock className="h-3 w-3" />
+            {diasRestantes === 0 ? "vence hoy" : `${diasRestantes} d`}
+          </span>
+        )}
+      </TableCell>
+
+      <TableCell className="text-right font-medium tabular-nums">{money(c.total)}</TableCell>
+
+      <TableCell>
+        <Badge variant={badge.variant} className={badge.clase}>
+          {ESTADO_COTIZACION_LABEL[c.estado]}
+        </Badge>
+      </TableCell>
+
+      <TableCell>
+        {ocupado ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Acciones">⋯</Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onPdf}>
+                <Download className="mr-2 h-4 w-4" />
+                Descargar PDF
+              </DropdownMenuItem>
+
+              {c.estado === "borrador" && (
+                <DropdownMenuItem onClick={() => onEstado("enviada")}>
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Marcar como enviada
+                </DropdownMenuItem>
+              )}
+
+              {(c.estado === "enviada" || c.estado === "borrador") && (
+                <>
+                  <DropdownMenuItem onClick={() => onEstado("aceptada")}>
+                    <CheckCircle2 className="mr-2 h-4 w-4 text-[var(--chart-2)]" />
+                    El cliente la aceptó
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onEstado("rechazada")}>
+                    <XCircle className="mr-2 h-4 w-4 text-destructive" />
+                    La rechazó
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {convertible && (
+                <DropdownMenuItem onClick={onConvertir} className="font-medium">
+                  <ArrowRight className="mr-2 h-4 w-4 text-[var(--chart-1)]" />
+                  Convertir en pedido
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export default CotizacionesPanel
