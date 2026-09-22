@@ -12,41 +12,13 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getParamNumber } from "@/lib/crm-parametros-actions"
 import { PARAM } from "@/lib/crm-parametros"
 import { hoyISO, sumarDias, diasEntre } from "@/lib/crm-fechas"
+import type { Oportunidad, TipoOportunidad } from "@/lib/crm-oportunidades"
+export type { Oportunidad, TipoOportunidad } from "@/lib/crm-oportunidades"
 
 export interface ActionResult<T = unknown> {
   success: boolean
   data?: T
   error?: string
-}
-
-export type TipoOportunidad =
-  | "cliente_dormido"
-  | "bajo_volumen"
-  | "venta_cruzada"
-  | "prospecto_estancado"
-  | "cotizacion_sin_respuesta"
-  | "cupo_sin_usar"
-
-export interface Oportunidad {
-  tipo: TipoOportunidad
-  titulo: string
-  detalle: string
-  /** 1 (baja) a 5 (alta). Ordena la lista. */
-  relevancia: number
-  /** Cuánto podría valer, cuando se puede estimar. */
-  valorPotencial?: number
-  clienteId?: number
-  prospectoId?: number
-  accionSugerida: string
-}
-
-export const TIPO_OPORTUNIDAD_LABEL: Record<TipoOportunidad, string> = {
-  cliente_dormido: "Dejó de comprar",
-  bajo_volumen: "Bajó el volumen",
-  venta_cruzada: "Venta cruzada",
-  prospecto_estancado: "Prospecto estancado",
-  cotizacion_sin_respuesta: "Cotización sin respuesta",
-  cupo_sin_usar: "Cupo sin usar",
 }
 
 function fallo(err: unknown): ActionResult<never> {

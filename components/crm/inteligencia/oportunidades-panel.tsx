@@ -13,9 +13,9 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import {
-  getOportunidades, TIPO_OPORTUNIDAD_LABEL,
-  type Oportunidad, type TipoOportunidad,
+  getOportunidades, type Oportunidad, type TipoOportunidad,
 } from "@/lib/crm-oportunidades-actions"
+import { TIPO_OPORTUNIDAD_LABEL } from "@/lib/crm-oportunidades"
 import { money } from "@/lib/crm-cotizaciones"
 import { KpiCard } from "@/components/crm/ui/kpi-card"
 import { Card, CardContent } from "@/components/ui/card"

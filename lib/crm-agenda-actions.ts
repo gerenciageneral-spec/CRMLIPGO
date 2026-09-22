@@ -10,57 +10,15 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { hoyISO, sumarDias } from "@/lib/crm-fechas"
+import type { EstadoCita, Cita } from "@/lib/crm-agenda"
+// Se reexportan para no romper a quien ya los importaba desde aqui.
+export type { EstadoCita, Cita } from "@/lib/crm-agenda"
 
 export interface ActionResult<T = unknown> {
   success: boolean
   data?: T
   error?: string
 }
-
-export type EstadoCita = "pendiente" | "cumplida" | "reprogramada" | "cancelada"
-
-export interface Cita {
-  id: number
-  idempresa: number
-  titulo: string
-  descripcion: string | null
-  tipo: string
-  fecha: string
-  hora_inicio: string | null
-  hora_fin: string | null
-  prospecto_id: number | null
-  cliente_id: number | null
-  vendedor_id: number | null
-  usuario_asignado: string | null
-  estado: EstadoCita
-  recordatorio_dias: number
-  actividad_id: number | null
-  direccion: string | null
-  latitud: number | null
-  longitud: number | null
-  creado_por: string | null
-  creado_en: string
-
-  // Resueltos al leer
-  prospecto_nombre?: string | null
-  cliente_nombre?: string | null
-}
-
-export const ESTADO_CITA_LABEL: Record<EstadoCita, string> = {
-  pendiente: "Pendiente",
-  cumplida: "Cumplida",
-  reprogramada: "Reprogramada",
-  cancelada: "Cancelada",
-}
-
-export const TIPOS_CITA = [
-  { valor: "visita", etiqueta: "Visita" },
-  { valor: "llamada", etiqueta: "Llamada" },
-  { valor: "reunion", etiqueta: "Reunión" },
-  { valor: "entrega", etiqueta: "Entrega" },
-  { valor: "cobro", etiqueta: "Cobro" },
-  { valor: "otro", etiqueta: "Otro" },
-]
 
 function fallo(err: unknown): ActionResult<never> {
   const msg = err instanceof Error ? err.message : "Error desconocido"

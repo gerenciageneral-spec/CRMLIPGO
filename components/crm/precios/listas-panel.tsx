@@ -8,10 +8,9 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import {
-  getListas, crearLista, getDetalleLista, fijarPrecioProducto,
-  quitarPrecioProducto, aplicarDescuentoMasivo, previsualizarLista,
-  TIPO_LISTA_LABEL, type ListaPrecios, type LineaLista, type TipoLista,
+  getListas, crearLista, getDetalleLista, fijarPrecioProducto, quitarPrecioProducto, aplicarDescuentoMasivo, previsualizarLista, type ListaPrecios, type LineaLista, type TipoLista,
 } from "@/lib/crm-precios-actions"
+import { TIPO_LISTA_LABEL } from "@/lib/crm-precios"
 import { getProductosCrm } from "@/lib/crm-catalogos-actions"
 import type { ProductoCrm } from "@/lib/crm-catalogos"
 import { money } from "@/lib/crm-cotizaciones"

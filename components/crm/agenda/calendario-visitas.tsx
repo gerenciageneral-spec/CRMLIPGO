@@ -14,7 +14,10 @@ import {
   Users, Truck, Wallet, CheckCircle2, CalendarClock,
 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
-import { getCitas, crearCita, TIPOS_CITA, type Cita, type EstadoCita } from "@/lib/crm-agenda-actions"
+import {
+  getCitas, crearCita, type Cita, type EstadoCita,
+} from "@/lib/crm-agenda-actions"
+import { TIPOS_CITA } from "@/lib/crm-agenda"
 import { getClientesCrm } from "@/lib/crm-catalogos-actions"
 import { getProspectos } from "@/lib/crm-prospectos-actions"
 import type { ClienteCrm } from "@/lib/crm-catalogos"
