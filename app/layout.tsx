@@ -18,13 +18,13 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: "LiPGO - Centro de Operaciones",
-  description: "Aplicación web de logística y operaciones",
+  title: "LIPGO CRM - Gestión Comercial",
+  description: "Prospectos, cotizaciones, pedidos y cartera",
   generator: "v0.app",
-  applicationName: "LIPgo",
+  applicationName: "LIPGO CRM",
   appleWebApp: {
     capable: true,
-    title: "LIPgo",
+    title: "LIPGO CRM",
     statusBarStyle: "default",
   },
   // iOS/Safari necesita el meta legacy `apple-mobile-web-app-capable=yes` para

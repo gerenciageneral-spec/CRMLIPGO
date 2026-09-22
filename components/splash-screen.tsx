@@ -161,7 +161,7 @@ export function SplashScreen({ onComplete, greeting }: SplashScreenProps) {
               className="text-5xl md:text-6xl font-bold text-white mb-2 tracking-tight"
               style={{ textShadow: "0 4px 30px rgba(0, 0, 0, 0.3)" }}
             >
-              Lip<span className="text-cyan-300">Go</span>
+              LIPGO <span className="text-cyan-300">CRM</span>
             </motion.h1>
 
             {/* Subtitulo */}
@@ -171,7 +171,7 @@ export function SplashScreen({ onComplete, greeting }: SplashScreenProps) {
               transition={{ duration: 0.6, delay: 1.0, ease: "easeOut" }}
               className="text-cyan-100/80 text-base md:text-lg font-light tracking-wide"
             >
-              Sistema de Gestión Operativa
+              Gestión Comercial
             </motion.p>
 
             {/* Barra de carga con shimmer */}

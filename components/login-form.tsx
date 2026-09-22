@@ -86,9 +86,11 @@ export function LoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 flex flex-col items-center">
-          <Image src="/lipgo-logo.png" alt="LiPGO" width={200} height={60} className="h-16 w-auto mb-4" priority />
-          <CardTitle className="text-2xl font-bold">Iniciar Sesión</CardTitle>
-          <CardDescription>Ingresa tus credenciales para acceder al sistema</CardDescription>
+          <Image src="/lipgo-logo.png" alt="LIPGO CRM" width={200} height={60} className="h-16 w-auto mb-3" priority />
+          <CardTitle className="text-2xl font-bold tracking-tight">
+            LIPGO <span className="text-[var(--chart-1)]">CRM</span>
+          </CardTitle>
+          <CardDescription>Gestión comercial · Ingresa tus credenciales</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

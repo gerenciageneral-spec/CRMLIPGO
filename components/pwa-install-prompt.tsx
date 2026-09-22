@@ -1,6 +1,6 @@
 "use client"
 
-// Banner "¿Quieres instalar LIPgo?" para escritorio y movil.
+// Banner "¿Quieres instalar LIPGO CRM?" para escritorio y movil.
 // - Escritorio/Android (Chromium): captura `beforeinstallprompt` y al pulsar
 //   "Sí, instalar" dispara el instalador nativo (crea el acceso directo con el
 //   icono de LIPgo definido en el manifest).
@@ -145,12 +145,12 @@ export function PwaInstallPrompt() {
     ) : plataforma === "chromium-desktop" ? (
       <span>
         Usa el ícono <strong>⊕ Instalar</strong> de la barra de direcciones, o el menú{" "}
-        <strong>⋮</strong> → <strong>“Instalar LIPgo”</strong>.
+        <strong>⋮</strong> → <strong>“Instalar LIPGO CRM”</strong>.
       </span>
     ) : (
       <span>
         Para instalarla, ábrela en <strong>Chrome</strong> o <strong>Edge</strong> y usa
-        “Instalar LIPgo”.
+        “Instalar LIPGO CRM”.
       </span>
     )
 
@@ -159,14 +159,14 @@ export function PwaInstallPrompt() {
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-4 shadow-lg">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted">
-            <Image src="/lipgo-icon.png" alt="LIPgo" width={48} height={48} className="h-12 w-12 object-contain" />
+            <Image src="/lipgo-icon.png" alt="LIPGO CRM" width={48} height={48} className="h-12 w-12 object-contain" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-card-foreground">¿Quieres instalar LIPgo?</p>
+            <p className="text-sm font-semibold text-card-foreground">¿Quieres instalar LIPGO CRM?</p>
             {deferred ? (
               <>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Instala el acceso directo en tu dispositivo para abrir LIPgo con un toque, como una app.
+                  Instala el acceso directo en tu dispositivo para abrir el CRM con un toque, como una app.
                 </p>
                 <div className="mt-3 flex items-center gap-2">
                   <Button size="sm" onClick={instalar} className="gap-1.5">

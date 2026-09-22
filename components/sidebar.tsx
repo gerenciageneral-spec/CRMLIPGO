@@ -480,11 +480,11 @@ export function Sidebar({
             >
               <span className="flex items-center gap-2.5">
                 <span className="lipgo-logo-mark">L</span>
-                <span className="lipgo-word">LIPgo</span>
+                <span className="lipgo-word">LIPGO CRM</span>
               </span>
               <span className="lipgo-tag">
                 <span className="lipgo-live" />
-                Torre de Control · en vivo
+                Gestión comercial
               </span>
             </button>
           )}
