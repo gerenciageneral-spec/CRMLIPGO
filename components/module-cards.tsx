@@ -62,11 +62,11 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
   return (
     <div>
       <style>{`
-        .apps-grid{ --r:18px; }
+        .apps-grid{ --r:14px; }
 
         .app-tile{
-          position:relative; display:flex; flex-direction:column; gap:12px;
-          border-radius:var(--r); padding:16px;
+          position:relative; display:flex; flex-direction:column; gap:8px;
+          border-radius:var(--r); padding:12px 13px;
           background:var(--card,#fff); border:1px solid #e7edf4;
           text-align:left; cursor:pointer; overflow:hidden;
           transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
@@ -75,7 +75,7 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
         /* Halo del color del área en la esquina, tenue en reposo. */
         .app-tile::after{
           content:""; position:absolute; top:-40%; right:-30%;
-          width:140px; height:140px; border-radius:50%;
+          width:104px; height:104px; border-radius:50%;
           background:radial-gradient(closest-side,
             color-mix(in srgb, var(--tint) 28%, transparent), transparent);
           opacity:.35; transition:opacity .25s, transform .25s; pointer-events:none;
@@ -92,7 +92,7 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
         }
 
         .app-tile:hover{
-          transform:translateY(-3px); border-color:transparent;
+          transform:translateY(-2px); border-color:transparent;
           box-shadow:0 18px 38px color-mix(in srgb, var(--tint) 26%, transparent),
                      0 6px 14px rgba(20,42,68,.06);
         }
@@ -113,7 +113,7 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
            sirve para reconocer el área, no para gritar. */
         .app-ico{
           position:relative; z-index:1;
-          width:46px; height:46px; border-radius:14px;
+          width:36px; height:36px; border-radius:11px;
           display:flex; align-items:center; justify-content:center;
           background:color-mix(in srgb, var(--tint) 14%, #fff);
           color:var(--tint);
@@ -129,17 +129,17 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
 
         .app-name{
           position:relative; z-index:1;
-          font-size:15px; font-weight:800; line-height:1.15;
+          font-size:13.5px; font-weight:800; line-height:1.2;
           color:#132a44; letter-spacing:-.01em;
         }
         .app-foot{
           position:relative; z-index:1;
           display:flex; align-items:center; justify-content:space-between;
         }
-        .app-count{ font-size:11.5px; color:#7387a0; font-weight:500; }
+        .app-count{ font-size:10.5px; color:#7387a0; font-weight:500; }
         .app-enter{
           display:inline-flex; align-items:center; gap:3px;
-          font-size:11.5px; font-weight:800; color:var(--tint);
+          font-size:10.5px; font-weight:800; color:var(--tint);
           opacity:0; transform:translateX(-6px);
           transition:opacity .2s, transform .2s;
         }
@@ -189,7 +189,7 @@ export function ModuleCards({ onSelectGroup }: ModuleCardsProps) {
               }
             >
               <span className="app-ico">
-                <Icono className="h-[22px] w-[22px]" aria-hidden="true" />
+                <Icono className="h-[18px] w-[18px]" aria-hidden="true" />
               </span>
 
               <span className="app-name">{group.title}</span>

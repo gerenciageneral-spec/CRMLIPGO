@@ -102,7 +102,7 @@ export function ProspectosPanel() {
 
         <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>
           <DialogTrigger asChild>
-            <Button>
+            <Button size="sm" className="h-8">
               <Plus className="mr-1.5 h-4 w-4" />
               Nuevo prospecto
             </Button>
