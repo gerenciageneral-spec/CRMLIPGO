@@ -30,6 +30,9 @@ primitiva; añadir rayas rompe el parecido de inmediato.
 | Métrica dentro de un diálogo | `MiniKpi`, `BarraMeta` | `mini-kpi.tsx` |
 | Varias vistas del mismo asunto | `SubNav` | `sub-nav.tsx` |
 | Estado con color | `BadgeEstado` | `modulo.tsx` |
+| Tabla que ordena y aguanta miles de filas | `TablaDatos` | `tabla-datos.tsx` |
+| Cualquier gráfica | `GraficaArea`, `GraficaBarras`, `GraficaLineas`, `GraficaDonut`, `GraficaCumplimiento`, `GraficaCombinada` | `graficas.tsx` |
+| Entrada y transiciones | `Aparece`, `ListaEscalonada`, `CambioDeVista`, `ValorVivo` | `movimiento.tsx` |
 
 ## Dos familias de KPI, y no se mezclan
 
@@ -63,3 +66,37 @@ Números con `tabular-nums` y `toLocaleString("es-CO")`: sin cifras de ancho fij
 las unidades no quedan una debajo de otra y las columnas de dinero se leen mal.
 Fechas siempre por `lib/crm-fechas.ts`, nunca `toISOString()` a pelo — eso
 reintroduce el corrimiento de zona que ya se corrigió una vez.
+
+
+## Lo que se añadió por encima de LIPgo
+
+LIPgo y el CRM tienen exactamente las mismas dependencias; no faltaba nada para
+igualarlo. Lo que sigue existe para **superarlo**, y cada cosa resuelve un
+problema concreto que allá sigue abierto:
+
+**`TablaDatos` (TanStack Table v9 + Virtual).** Ordenar pulsando la cabecera y
+buscar sobre todas las columnas. En LIPgo, para ordenar una tabla hay que
+exportar a Excel: se le pide al usuario que salga del sistema para hacer algo
+que el sistema debería hacer. Además virtualiza por encima de cien filas, así
+que una cartera de miles de facturas ya no congela el navegador.
+
+Al definir columnas, ordenar por el **valor real** y no por el texto: usar
+`accessorFn` que devuelva el número. Ordenar `"1.000.000"` como cadena lo pone
+antes que `"900.000"`.
+
+**dnd-kit en el embudo.** El arrastre era HTML5 nativo, que no responde a
+tactil: el vendedor abre el embudo desde el teléfono en la calle, y allí era
+sencillamente imposible mover una tarjeta. dnd-kit cubre ratón, dedo y teclado.
+El asa de arrastre es solo la manija, no la tarjeta entera, para que el selector
+de etapa siga siendo pulsable.
+
+**`graficas.tsx`.** Recharts ya estaba, pero cada panel recableaba a mano ejes,
+rejilla, degradado y tooltip: unas cuarenta líneas por gráfica, que es donde se
+cuelan las diferencias de estilo. Ahora son seis tipos listos, con el formato de
+pesos y los colores de marca ya puestos.
+
+**`movimiento.tsx` (framer-motion).** LIPgo anima solo su dashboard de gerencia
+y con clases CSS, que no saben escalonar una lista ni animar algo que
+desaparece. Todo lo de aquí respeta `prefers-reduced-motion`: quien lo tenga
+activado ve el contenido colocado, sin desplazamiento. No es un extra —a parte
+de la gente este movimiento le produce mareo.

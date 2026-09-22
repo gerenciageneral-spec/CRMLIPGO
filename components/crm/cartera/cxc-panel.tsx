@@ -4,8 +4,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Loader2, Search, Wallet, AlertTriangle, Receipt, Banknote, FileText,
+  Loader2, Wallet, AlertTriangle, Receipt, Banknote, FileText,
 } from "lucide-react"
+import type { ColumnDef } from "@tanstack/react-table"
 import { useAuth } from "@/components/auth-provider"
 import { getCuentasPorCobrar, asignarNumeroFactura } from "@/lib/crm-cartera-actions"
 import {
@@ -17,14 +18,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
-import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
+import { TablaDatos } from "@/components/crm/ui/tabla-datos"
 
 export function CxcPanel() {
   const { profile, selectedEmpresaId } = useAuth()
@@ -32,7 +32,9 @@ export function CxcPanel() {
 
   const [cuentas, setCuentas] = useState<CuentaPorCobrar[]>([])
   const [cargando, setCargando] = useState(true)
-  const [busqueda, setBusqueda] = useState("")
+  // Ya no hay estado de búsqueda propio: el buscador vive dentro de TablaDatos.
+  // Dos cajas de texto sobre la misma tabla solo sirven para que el usuario se
+  // pregunte cuál de las dos manda.
   const [filtro, setFiltro] = useState("pendientes")
   const [cobrando, setCobrando] = useState<CuentaPorCobrar | null>(null)
   const [facturando, setFacturando] = useState<CuentaPorCobrar | null>(null)
@@ -51,13 +53,136 @@ export function CxcPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId, filtro])
 
-  const visibles = useMemo(() => {
-    const t = busqueda.trim().toLowerCase()
-    if (!t) return cuentas
-    return cuentas.filter((c) =>
-      [c.cliente_nombre, c.numero_factura, c.pedido_numero].some((x) => x?.toLowerCase().includes(t)),
-    )
-  }, [cuentas, busqueda])
+  // El filtro de estado se aplica ANTES de entregar los datos a la tabla: la
+  // consulta ya trae solo lo pedido, así que aquí `visibles` es exactamente lo
+  // que la tabla recibe, y los KPIs de arriba cuadran con lo que se ve abajo.
+  const visibles = cuentas
+
+  // Columnas de la tabla.
+  //
+  // Lo importante está en cómo ordenan, no en cómo se pintan: "Vence" ordena
+  // por los días de vencimiento reales y "Valor"/"Saldo" por el número, nunca
+  // por el texto ya formateado. Ordenar "$ 1.000.000" como cadena lo pondría
+  // antes que "$ 900.000", que es justo el error que hace desconfiar de la
+  // tabla y mandar a todo el mundo de vuelta a Excel.
+  const columnas = useMemo<ColumnDef<any, any>[]>(() => [
+    {
+      accessorKey: "cliente_nombre",
+      header: "Cliente",
+      cell: ({ row }) => (
+        <span className="block max-w-[200px] truncate font-medium">
+          {row.original.cliente_nombre ?? "—"}
+        </span>
+      ),
+    },
+    {
+      // Se ordena e indexa por el número de factura, pero la celda también
+      // muestra el pedido, que es por donde pregunta el cliente cuando aún no
+      // hay factura emitida.
+      accessorKey: "numero_factura",
+      header: "Factura",
+      cell: ({ row }) => {
+        const c = row.original as CuentaPorCobrar
+        return (
+          <>
+            {c.numero_factura ? (
+              <span className="text-sm">{c.numero_factura}</span>
+            ) : (
+              <Button
+                variant="ghost" size="sm"
+                className="h-6 px-1.5 text-xs text-muted-foreground"
+                onClick={() => setFacturando(c)}
+              >
+                <FileText className="mr-1 h-3 w-3" />
+                Asignar
+              </Button>
+            )}
+            {c.pedido_numero && (
+              <p className="text-[11px] text-muted-foreground">{c.pedido_numero}</p>
+            )}
+          </>
+        )
+      },
+    },
+    {
+      // `accessorFn` y no `accessorKey`: se ordena por los días vencidos, que
+      // es LA pregunta del módulo ("¿a quién cobro primero?"). Ordenar por la
+      // fecha en texto daría el mismo orden solo por casualidad del formato
+      // ISO, y dejaría de funcionar el día que cambie el formato.
+      id: "vence",
+      accessorFn: (c: CuentaPorCobrar) => diasVencido(c.fecha_vencimiento, hoyISO()),
+      header: "Vence",
+      cell: ({ row }) => {
+        const c = row.original as CuentaPorCobrar
+        const dias = diasVencido(c.fecha_vencimiento, hoyISO())
+        return (
+          <>
+            <span className="text-sm">{c.fecha_vencimiento}</span>
+            {dias > 0 && (
+              <p className="text-[11px] font-medium text-destructive">
+                {dias} día{dias === 1 ? "" : "s"} vencida
+              </p>
+            )}
+          </>
+        )
+      },
+    },
+    {
+      accessorKey: "valor_original",
+      header: "Valor",
+      cell: ({ row }) => (
+        <div className="text-right tabular-nums text-muted-foreground">
+          {money(row.original.valor_original)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "saldo",
+      header: "Saldo",
+      cell: ({ row }) => (
+        <div className="text-right font-semibold tabular-nums">
+          {money(row.original.saldo)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "estado",
+      header: "Estado",
+      cell: ({ row }) => {
+        const c = row.original as CuentaPorCobrar
+        const vencida = diasVencido(c.fecha_vencimiento, hoyISO()) > 0
+        return (
+          // Vencida en rojo, abonada en azul, al dia en gris:
+          // el color dice que hacer sin leer la fila entera.
+          <Badge
+            variant="outline"
+            className={`font-medium ${
+              vencida
+                ? "bg-red-50 text-red-700 border-red-200"
+                : c.estado === "parcial"
+                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                  : "bg-slate-50 text-slate-700 border-slate-200"
+            }`}
+          >
+            {ESTADO_CUENTA_LABEL[c.estado]}
+          </Badge>
+        )
+      },
+    },
+    {
+      // Columna de acciones: no ordena ni entra en la búsqueda global, porque
+      // no contiene un dato sino un botón.
+      id: "acciones",
+      header: "",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <Button size="sm" variant="outline" onClick={() => setCobrando(row.original as CuentaPorCobrar)}>
+          <Banknote className="mr-1 h-3.5 w-3.5" />
+          Abonar
+        </Button>
+      ),
+    },
+  ], [])
 
   const totales = useMemo(() => {
     const hoy = hoyISO()
@@ -106,16 +231,6 @@ export function CxcPanel() {
       </TiraKpi>
 
       <div className="flex flex-wrap gap-2">
-        <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por cliente o factura…"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
         <Select value={filtro} onValueChange={setFiltro}>
           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -128,104 +243,16 @@ export function CxcPanel() {
       {/* La tabla no desaparece mientras carga: la cabecera se queda en su
           sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
           por un spinner hace saltar el contenido dos veces en cada consulta. */}
-      <MarcoTabla>
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="text-xs font-semibold">Cliente</TableHead>
-              <TableHead className="text-xs font-semibold">Factura</TableHead>
-              <TableHead className="text-xs font-semibold">Vence</TableHead>
-              <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
-              <TableHead className="text-xs font-semibold text-right">Saldo</TableHead>
-              <TableHead className="text-xs font-semibold">Estado</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {cargando ? (
-              <FilaCargando columnas={7} />
-            ) : visibles.length === 0 ? (
-              <FilaVacia
-                columnas={7}
-                mensaje={busqueda ? "Nada coincide con la búsqueda." : "No hay cartera pendiente."}
-              />
-            ) : (
-              visibles.map((c) => {
-                const dias = diasVencido(c.fecha_vencimiento, hoyISO())
-                const vencida = dias > 0
-
-                return (
-                  <TableRow key={c.id} className={vencida ? "bg-destructive/5" : undefined}>
-                    <TableCell className="text-xs max-w-[200px] truncate font-medium">
-                      {c.cliente_nombre ?? "—"}
-                    </TableCell>
-
-                    <TableCell className="text-xs">
-                      {c.numero_factura ? (
-                        <span className="text-sm">{c.numero_factura}</span>
-                      ) : (
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-6 px-1.5 text-xs text-muted-foreground"
-                          onClick={() => setFacturando(c)}
-                        >
-                          <FileText className="mr-1 h-3 w-3" />
-                          Asignar
-                        </Button>
-                      )}
-                      {c.pedido_numero && (
-                        <p className="text-[11px] text-muted-foreground">{c.pedido_numero}</p>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="text-xs">
-                      <span className="text-sm">{c.fecha_vencimiento}</span>
-                      {vencida && (
-                        <p className="text-[11px] font-medium text-destructive">
-                          {dias} día{dias === 1 ? "" : "s"} vencida
-                        </p>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
-                      {money(c.valor_original)}
-                    </TableCell>
-
-                    <TableCell className="text-xs text-right font-semibold tabular-nums">
-                      {money(c.saldo)}
-                    </TableCell>
-
-                    <TableCell className="text-xs">
-                      {/* Vencida en rojo, abonada en azul, al dia en gris:
-                          el color dice que hacer sin leer la fila entera. */}
-                      <Badge
-                        variant="outline"
-                        className={`font-medium ${
-                          vencida
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : c.estado === "parcial"
-                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                              : "bg-slate-50 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        {ESTADO_CUENTA_LABEL[c.estado]}
-                      </Badge>
-                    </TableCell>
-
-                    <TableCell className="text-xs">
-                      <Button size="sm" variant="outline" onClick={() => setCobrando(c)}>
-                        <Banknote className="mr-1 h-3.5 w-3.5" />
-                        Abonar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })
-            )}
-          </TableBody>
-        </Table>
-      </MarcoTabla>
+      <TablaDatos
+        datos={visibles}
+        columnas={columnas}
+        cargando={cargando}
+        placeholderBusqueda="Buscar por cliente o factura…"
+        mensajeVacio="No hay cartera pendiente."
+        // La factura vencida se tiñe de rojo: es el aviso que se ve antes de
+        // leer nada, y sin él la cartera vencida se pierde entre la que no lo está.
+        claseFila={(c) => (diasVencido(c.fecha_vencimiento, hoyISO()) > 0 ? "bg-destructive/5" : undefined)}
+      />
 
       <RegistrarPagoDialog
         cuenta={cobrando}

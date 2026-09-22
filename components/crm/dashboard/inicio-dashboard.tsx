@@ -12,9 +12,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip,
-} from "recharts"
-import {
   Loader2, TrendingUp, Target, FileText, Wallet, CalendarClock, Stamp,
   UserX, ArrowRight, Users, ShoppingCart, AlertTriangle, Activity,
 } from "lucide-react"
@@ -23,6 +20,8 @@ import { getDashboardComercial, type DashboardComercial } from "@/lib/crm-dashbo
 import { money } from "@/lib/crm-cotizaciones"
 import { KpiCard } from "@/components/crm/ui/kpi-card"
 import { PanelCard } from "@/components/crm/ui/panel-card"
+import { GraficaArea } from "@/components/crm/ui/graficas"
+import { Aparece, ListaEscalonada, ElementoLista } from "@/components/crm/ui/movimiento"
 import { EncabezadoEjecutivo } from "@/components/crm/ui/encabezado-ejecutivo"
 import { ModuleCards } from "@/components/module-cards"
 import { Badge } from "@/components/ui/badge"
@@ -138,7 +137,10 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Escalonado: las cuatro tarjetas entran una tras otra, lo que guia la
+          mirada de izquierda a derecha en vez de soltarlas de golpe. */}
+      <ListaEscalonada className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ElementoLista>
         <KpiCard
           icon={TrendingUp}
           label="Ventas del mes"
@@ -147,6 +149,8 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
           trend={d?.ventas.variacion}
           trendHint="vs. mes anterior"
         />
+        </ElementoLista>
+        <ElementoLista>
         <KpiCard
           icon={Target}
           label="Pronóstico del embudo"
@@ -154,6 +158,8 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
           accent="info"
           trendHint={`${d?.embudo.prospectos ?? 0} prospectos activos`}
         />
+        </ElementoLista>
+        <ElementoLista>
         <KpiCard
           icon={FileText}
           label="Tasa de cierre"
@@ -164,6 +170,8 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
           trendHint="Cotizaciones ganadas"
           onClick={() => onSelectModule?.("Cotizaciones")}
         />
+        </ElementoLista>
+        <ElementoLista>
         <KpiCard
           icon={Wallet}
           label="Cartera vencida"
@@ -174,7 +182,8 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
           invertTrend
           onClick={() => onSelectModule?.("Antigüedad de Cartera")}
         />
-      </div>
+        </ElementoLista>
+      </ListaEscalonada>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <PanelCard
@@ -184,47 +193,15 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
           accent="primary"
           className="lg:col-span-2"
         >
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={d?.ventasPorDia ?? []} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gradVentasInicio" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#5bc0de" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#5bc0de" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="fecha"
-                  tickFormatter={(f: string) => f.slice(8)}
-                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                  axisLine={false} tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                  axisLine={false} tickLine={false}
-                  tickFormatter={(v: number) =>
-                    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${Math.round(v / 1000)}k`
-                  }
-                />
-                <Tooltip
-                  formatter={(v: number) => [money(v), "Ventas"]}
-                  labelFormatter={(f: string) => `Día ${f.slice(8)}`}
-                  contentStyle={{
-                    backgroundColor: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 10,
-                    fontSize: 12,
-                  }}
-                />
-                <Area
-                  type="monotone" dataKey="valor"
-                  stroke="#0aa1c4" strokeWidth={2}
-                  fill="url(#gradVentasInicio)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <GraficaArea
+            datos={d?.ventasPorDia ?? []}
+            x="fecha"
+            y="valor"
+            etiqueta="Ventas"
+            alto={224}
+            moneda
+            formatoX={(f: string) => f.slice(8)}
+          />
         </PanelCard>
 
         <PanelCard

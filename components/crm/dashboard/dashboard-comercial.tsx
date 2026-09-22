@@ -8,14 +8,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip,
-} from "recharts"
-import {
   Loader2, TrendingUp, Target, FileText, Wallet, AlertTriangle, CalendarClock,
   Stamp, UserX, RefreshCw, ArrowRight, LayoutDashboard } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getDashboardComercial, type DashboardComercial } from "@/lib/crm-dashboard-actions"
 import { money } from "@/lib/crm-cotizaciones"
+import { GraficaArea } from "@/components/crm/ui/graficas"
 import { KpiCard } from "@/components/crm/ui/kpi-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -177,45 +175,15 @@ export function DashboardComercialPanel({ onNavigate }: Props) {
             <CardTitle className="text-base">Ventas del mes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={ventasPorDia} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradVentas" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                  <XAxis
-                    dataKey="fecha"
-                    tickFormatter={(f: string) => f.slice(8)}
-                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                    axisLine={false} tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                    axisLine={false} tickLine={false}
-                    tickFormatter={(v: number) => (v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${v / 1000}k`)}
-                  />
-                  <Tooltip
-                    formatter={(v: number) => [money(v), "Ventas"]}
-                    labelFormatter={(f: string) => `Día ${f.slice(8)}`}
-                    contentStyle={{
-                      backgroundColor: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area
-                    type="monotone" dataKey="valor"
-                    stroke="var(--chart-1)" strokeWidth={2}
-                    fill="url(#gradVentas)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <GraficaArea
+              datos={ventasPorDia}
+              x="fecha"
+              y="valor"
+              etiqueta="Ventas"
+              alto={224}
+              moneda
+              formatoX={(f: string) => f.slice(8)}
+            />
 
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span>{ventas.pedidos} pedidos</span>

@@ -2,16 +2,28 @@
 
 // Embudo de ventas en tablero kanban.
 //
-// ARRASTRE CON HTML5 NATIVO, sin libreria de drag & drop. Para siete columnas
-// no compensa sumar otra dependencia al arbol: la API nativa cubre el caso y
-// funciona en todos los navegadores de escritorio.
+// ARRASTRE CON dnd-kit. Antes se usaba la API HTML5 nativa, que tenia dos
+// fallos que en este modulo importan mucho:
 //
-// EL DETALLE DEL ARRASTRE EN MOVIL: la API HTML5 no responde a tactil. Por eso
-// cada tarjeta trae ademas un selector de etapa, que en telefono es el camino
-// real y en escritorio queda como alternativa accesible al arrastre (que no se
-// puede hacer con teclado).
+//   - No responde a tactil. El vendedor abre el embudo desde el telefono en la
+//     calle, y alli arrastrar era sencillamente imposible.
+//   - No es accesible por teclado.
+//
+// dnd-kit resuelve los dos: el PointerSensor cubre raton y dedo, y el
+// KeyboardSensor permite mover una tarjeta con las flechas. El selector de
+// etapa de cada tarjeta se conserva de todos modos, porque sigue siendo el
+// camino mas rapido cuando se sabe exactamente a donde va.
+//
+// La tarjeta que se arrastra se pinta en un DragOverlay: sin el, la tarjeta
+// original se queda en su sitio y el usuario no ve que esta moviendo nada.
 
 import { useEffect, useMemo, useState } from "react"
+import {
+  DndContext, DragOverlay, PointerSensor, KeyboardSensor,
+  useSensor, useSensors, closestCorners,
+  type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core"
+import { useDraggable, useDroppable } from "@dnd-kit/core"
 import { Loader2, GripVertical, TrendingUp, Users, Target, Filter } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getProspectos, getEtapas, moverEtapa, getResumenEmbudo } from "@/lib/crm-prospectos-actions"
@@ -34,7 +46,14 @@ export function EmbudoKanban() {
   const [resumen, setResumen] = useState<ResumenEmbudo | null>(null)
   const [cargando, setCargando] = useState(true)
   const [arrastrando, setArrastrando] = useState<number | null>(null)
-  const [sobreEtapa, setSobreEtapa] = useState<number | null>(null)
+
+  // Se exige recorrer 6px antes de considerar que es un arrastre. Sin esa
+  // holgura, cualquier clic sobre el selector de etapa se interpreta como
+  // arrastre y el desplegable no llega a abrirse nunca.
+  const sensores = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor),
+  )
 
   const cargar = async () => {
     const [eRes, pRes, rRes] = await Promise.all([
@@ -61,6 +80,12 @@ export function EmbudoKanban() {
     }
     return mapa
   }, [etapas, prospectos])
+
+  // La tarjeta que se esta arrastrando, para pintarla en el overlay.
+  const prospectoArrastrado = useMemo(
+    () => (arrastrando == null ? null : prospectos.find((p) => p.id === arrastrando) ?? null),
+    [arrastrando, prospectos],
+  )
 
   const mover = async (prospectoId: number, etapaDestino: number) => {
     const prospecto = prospectos.find((p) => p.id === prospectoId)
@@ -139,93 +164,136 @@ export function EmbudoKanban() {
 
       {/* Scroll horizontal: con siete etapas no caben en pantalla y apilarlas
           en vertical perdería la lectura de embudo. */}
-      <div className="flex gap-3 overflow-x-auto pb-4">
-        {etapas.map((etapa) => {
-          const items = porEtapa.get(etapa.id) ?? []
-          const valor = items.reduce((s, p) => s + Number(p.valor_estimado || 0), 0)
-          const esDestino = sobreEtapa === etapa.id
-
-          return (
-            <div
+      <DndContext
+        sensors={sensores}
+        collisionDetection={closestCorners}
+        onDragStart={(e: DragStartEvent) => setArrastrando(Number(e.active.id))}
+        onDragCancel={() => setArrastrando(null)}
+        onDragEnd={(e: DragEndEvent) => {
+          setArrastrando(null)
+          const destino = e.over?.id
+          if (destino != null) mover(Number(e.active.id), Number(destino))
+        }}
+      >
+        <div className="flex gap-3 overflow-x-auto pb-4">
+          {etapas.map((etapa) => (
+            <ColumnaEtapa
               key={etapa.id}
-              onDragOver={(e) => {
-                e.preventDefault() // sin esto el navegador no permite soltar
-                setSobreEtapa(etapa.id)
-              }}
-              onDragLeave={() => setSobreEtapa((s) => (s === etapa.id ? null : s))}
-              onDrop={(e) => {
-                e.preventDefault()
-                setSobreEtapa(null)
-                if (arrastrando != null) mover(arrastrando, etapa.id)
-                setArrastrando(null)
-              }}
-              className={`flex w-72 shrink-0 flex-col rounded-xl border bg-muted/30 transition-colors ${
-                esDestino ? "border-[var(--chart-1)] bg-[var(--chart-1)]/5" : ""
-              }`}
-            >
-              <div className="space-y-1 border-b px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: etapa.color ?? "var(--chart-1)" }}
-                      aria-hidden="true"
-                    />
-                    {etapa.nombre}
-                  </span>
-                  <Badge variant="secondary">{items.length}</Badge>
-                </div>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  {money(valor)}
-                  {!etapa.es_ganada && !etapa.es_perdida && ` · ${etapa.probabilidad}%`}
-                </p>
-              </div>
+              etapa={etapa}
+              items={porEtapa.get(etapa.id) ?? []}
+              etapas={etapas}
+              arrastrando={arrastrando}
+              onCambiarEtapa={mover}
+            />
+          ))}
+        </div>
 
-              <div className="flex-1 space-y-2 p-2">
-                {items.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">Sin prospectos</p>
-                ) : (
-                  items.map((p) => (
-                    <TarjetaKanban
-                      key={p.id}
-                      prospecto={p}
-                      etapas={etapas}
-                      arrastrando={arrastrando === p.id}
-                      onDragStart={() => setArrastrando(p.id)}
-                      onDragEnd={() => setArrastrando(null)}
-                      onCambiarEtapa={(destino) => mover(p.id, destino)}
-                    />
-                  ))
+        {/* La tarjeta "fantasma" que sigue al cursor. Se pinta fuera del flujo
+            para que no la recorte el scroll horizontal de las columnas. */}
+        <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.18,0.67,0.6,1.22)" }}>
+          {prospectoArrastrado && (
+            <Card className="w-72 rotate-2 cursor-grabbing shadow-lg ring-2 ring-[var(--chart-1)]/40">
+              <CardContent className="space-y-1 p-3">
+                <p className="truncate text-sm font-medium">{prospectoArrastrado.razon_social}</p>
+                {prospectoArrastrado.valor_estimado > 0 && (
+                  <p className="text-sm font-semibold tabular-nums">
+                    {money(prospectoArrastrado.valor_estimado)}
+                  </p>
                 )}
-              </div>
-            </div>
-          )
-        })}
+              </CardContent>
+            </Card>
+          )}
+        </DragOverlay>
+      </DndContext>
+    </div>
+  )
+}
+
+/** Una columna del tablero: es la zona donde se sueltan las tarjetas. */
+function ColumnaEtapa({
+  etapa, items, etapas, arrastrando, onCambiarEtapa,
+}: {
+  etapa: Etapa
+  items: ProspectoConEtapa[]
+  etapas: Etapa[]
+  arrastrando: number | null
+  onCambiarEtapa: (prospectoId: number, etapaId: number) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: etapa.id })
+  const valor = items.reduce((s, p) => s + Number(p.valor_estimado || 0), 0)
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex w-72 shrink-0 flex-col rounded-xl border bg-muted/30 transition-colors ${
+        isOver ? "border-[var(--chart-1)] bg-[var(--chart-1)]/5" : ""
+      }`}
+    >
+      <div className="space-y-1 border-b px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: etapa.color ?? "var(--chart-1)" }}
+              aria-hidden="true"
+            />
+            {etapa.nombre}
+          </span>
+          <Badge variant="secondary">{items.length}</Badge>
+        </div>
+        <p className="text-xs tabular-nums text-muted-foreground">
+          {money(valor)}
+          {!etapa.es_ganada && !etapa.es_perdida && ` · ${etapa.probabilidad}%`}
+        </p>
+      </div>
+
+      <div className="flex-1 space-y-2 p-2">
+        {items.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">Sin prospectos</p>
+        ) : (
+          items.map((p) => (
+            <TarjetaKanban
+              key={p.id}
+              prospecto={p}
+              etapas={etapas}
+              arrastrando={arrastrando === p.id}
+              onCambiarEtapa={(destino) => onCambiarEtapa(p.id, destino)}
+            />
+          ))
+        )}
       </div>
     </div>
   )
 }
 
 function TarjetaKanban({
-  prospecto: p, etapas, arrastrando, onDragStart, onDragEnd, onCambiarEtapa,
+  prospecto: p, etapas, arrastrando, onCambiarEtapa,
 }: {
   prospecto: ProspectoConEtapa
   etapas: Etapa[]
   arrastrando: boolean
-  onDragStart: () => void
-  onDragEnd: () => void
   onCambiarEtapa: (etapaId: number) => void
 }) {
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: p.id })
+
   return (
     <Card
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`cursor-grab active:cursor-grabbing ${arrastrando ? "opacity-40" : ""}`}
+      ref={setNodeRef}
+      className={arrastrando ? "opacity-40" : undefined}
     >
       <CardContent className="space-y-2 p-3">
         <div className="flex items-start gap-1.5">
-          <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/40" aria-hidden="true" />
+          {/* El asa es SOLO la manija, no la tarjeta entera: asi el selector de
+              etapa y el texto siguen siendo seleccionables con el raton. */}
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            aria-label={`Mover ${p.razon_social} de etapa`}
+            className="mt-0.5 shrink-0 cursor-grab touch-none rounded text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+          >
+            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{p.razon_social}</p>
             {p.contacto_nombre && (
