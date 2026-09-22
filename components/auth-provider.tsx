@@ -12,6 +12,16 @@ export interface AccessibleEmpresa {
   nombre: string
 }
 
+/**
+ * Empresa sobre la que opera el CRM: Harinera Indupan.
+ *
+ * Es el punto de partida, no un valor fijo. Todo el sistema se construyo
+ * multiempresa (cada tabla lleva `idempresa`, cada consulta filtra por el), y
+ * el dia que entre otra empresa basta con darle acceso al usuario: el selector
+ * de la barra superior aparece solo cuando hay mas de una.
+ */
+export const EMPRESA_POR_DEFECTO = 1
+
 interface AuthContextType {
   user: User | null
   profile: UserProfile | null
@@ -31,7 +41,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   accessibleEmpresas: [],
-  selectedEmpresaId: null,
+  selectedEmpresaId: EMPRESA_POR_DEFECTO,
   selectedEmpresaNombre: null,
   setSelectedEmpresaId: () => {},
   loadingEmpresas: true,
@@ -45,7 +55,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   // Empresa selection state
   const [accessibleEmpresas, setAccessibleEmpresas] = useState<AccessibleEmpresa[]>([])
-  const [selectedEmpresaId, setSelectedEmpresaIdState] = useState<number | null>(null)
+  // EMPRESA POR DEFECTO desde el primer render, no null.
+  //
+  // El CRM opera sobre una sola empresa (Harinera Indupan, id 1). Arrancar en
+  // null obligaba a cada modulo a esperar a que /api/accessible-empresas
+  // respondiera; si esa llamada tardaba o fallaba, `empresaId` se quedaba sin
+  // valor, las consultas no se lanzaban y la pantalla quedaba cargando para
+  // siempre sin decir por que.
+  //
+  // El dia que entre una segunda empresa, el selector la sobrescribe: esto es
+  // solo el punto de partida, no un valor fijo. Por eso sigue habiendo
+  // localStorage, selector y acceso por perfil.
+  const [selectedEmpresaId, setSelectedEmpresaIdState] = useState<number | null>(EMPRESA_POR_DEFECTO)
   const [loadingEmpresas, setLoadingEmpresas] = useState(true)
 
   // SIN adaptador de cookies a propósito.
@@ -91,7 +112,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 401 = aún no hay sesión (pantalla de login / hidratación inicial):
         // estado esperado, no un error — un console.error aquí dispara el
         // overlay rojo del modo desarrollo y tapa toda la pantalla.
-        if (response.status !== 401) console.warn("[v0] Failed to fetch accessible empresas:", response.status)
+        if (response.status !== 401) console.warn("[crm] no se pudieron leer las empresas:", response.status)
+        // Se deja la de por defecto para que el selector no quede vacio y los
+        // modulos puedan seguir consultando.
+        setAccessibleEmpresas((prev) =>
+          prev.length ? prev : [{ id: EMPRESA_POR_DEFECTO, nombre: "Harinera Indupan" }],
+        )
         return
       }
       const data = await response.json()
@@ -203,14 +229,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Load accessible empresas when profile is loaded
   useEffect(() => {
     if (profile) {
-      // Try to restore selected empresa from localStorage first
-      const storedEmpresaId = localStorage.getItem('selectedEmpresaId')
-      if (storedEmpresaId) {
-        setSelectedEmpresaIdState(parseInt(storedEmpresaId, 10))
-      } else if (profile.empresa_id) {
-        // If no stored value, use the user's profile empresa_id as default
-        setSelectedEmpresaIdState(profile.empresa_id)
-      }
+      // Orden de preferencia: lo que el usuario eligio la ultima vez, luego
+      // la empresa de su perfil, y si no hay nada, la de por defecto.
+      //
+      // Nunca se deja en null: un `empresaId` sin valor hace que los modulos
+      // no lancen sus consultas y la pantalla se quede cargando sin explicar
+      // por que.
+      const guardada = Number(localStorage.getItem('selectedEmpresaId'))
+      setSelectedEmpresaIdState(
+        Number.isFinite(guardada) && guardada > 0
+          ? guardada
+          : profile.empresa_id || EMPRESA_POR_DEFECTO,
+      )
       fetchAccessibleEmpresas()
     }
   }, [profile, fetchAccessibleEmpresas])
@@ -218,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignOut = async () => {
     // Clear selected empresa from localStorage so next login uses profile default
     localStorage.removeItem('selectedEmpresaId')
-    setSelectedEmpresaIdState(null)
+    setSelectedEmpresaIdState(EMPRESA_POR_DEFECTO)
     setAccessibleEmpresas([])
     await supabase.auth.signOut()
     setUser(null)
