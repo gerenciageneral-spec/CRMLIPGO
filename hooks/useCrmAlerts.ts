@@ -67,7 +67,9 @@ export function useCrmAlerts<T extends CrmAlerta = CrmAlerta>(
         // El permiso se consulta ANTES del fetch: sin permiso no se pregunta
         // por datos que el usuario no puede ver.
         const permisos = await getUserPermissions(userId)
-        if (!permisos || (permisos as Record<string, unknown>)[permiso] !== true) {
+        // El doble casting es necesario: UserPermissions es una interfaz de
+        // columnas concretas y aqui el permiso llega como string en runtime.
+        if (!permisos || (permisos as unknown as Record<string, unknown>)[permiso] !== true) {
           if (!cancelado) {
             setHasPermission(false)
             setLoading(false)
