@@ -27,6 +27,11 @@ import {
 } from "@/components/ui/tooltip"
 import { toast } from "@/hooks/use-toast"
 
+/** Parametros que son SECRETOS: se pintan como campo de contrasena para que no
+ *  queden a la vista de quien pase por detras. Siguen siendo editables; lo que
+ *  cambia es que no se muestran. */
+const SECRETOS = new Set(["pedido.clave_contabilidad", "pedido.clave_gerencia"])
+
 /** Parametros de texto con opciones cerradas. Se declaran aqui y no en la
  *  base porque son valores que el CODIGO interpreta: agregar una opcion exige
  *  implementarla, no solo escribirla. */
@@ -192,7 +197,14 @@ export function ParametrosPanel() {
                       <div className="relative flex-1">
                         <Input
                           id={p.clave}
-                          type={p.tipo === "number" ? "number" : "text"}
+                          type={
+                            SECRETOS.has(p.clave)
+                              ? "password"
+                              : p.tipo === "number"
+                                ? "number"
+                                : "text"
+                          }
+                          autoComplete={SECRETOS.has(p.clave) ? "new-password" : undefined}
                           value={borrador[p.clave] ?? ""}
                           disabled={!p.editable}
                           min={p.min_valor ?? undefined}

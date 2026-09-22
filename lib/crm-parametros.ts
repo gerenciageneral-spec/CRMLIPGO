@@ -47,6 +47,11 @@ export const PARAM = {
   // Pedidos
   PEDIDO_DOBLE_AUTORIZACION: "pedido.requiere_doble_autorizacion",
   PEDIDO_UMBRAL_GERENCIA: "pedido.monto_autorizacion_gerencia",
+  /** Claves compartidas por rol. Estan aqui y no escritas en el codigo, que
+   *  es como las tenia LIPgo ("LIP123456" literal en annulOrder). Aun asi, la
+   *  clave sola no identifica a nadie: quien firma se toma de la sesion. */
+  CLAVE_CONTABILIDAD: "pedido.clave_contabilidad",
+  CLAVE_GERENCIA: "pedido.clave_gerencia",
 
   // Rutas
   RUTA_MAX_PARADAS: "ruta.max_paradas_dia",
@@ -79,6 +84,11 @@ export const PARAM_FALLBACK: Record<ParamKey, string> = {
   "descuento.maximo_vendedor": "10",
   "pedido.requiere_doble_autorizacion": "true",
   "pedido.monto_autorizacion_gerencia": "0",
+  // Sin valor de respaldo a proposito: si la clave no esta configurada, la
+  // autorizacion se niega y avisa. Un respaldo aqui seria una clave por
+  // defecto que nadie cambia.
+  "pedido.clave_contabilidad": "",
+  "pedido.clave_gerencia": "",
   "ruta.max_paradas_dia": "12",
   "ruta.velocidad_promedio_kmh": "35",
 }
