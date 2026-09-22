@@ -76,8 +76,22 @@ create trigger trg_crm_vend_touch before update on public.crm_vendedores_detalle
 
 
 -- Alta de los vendedores que ya existen, para que el modulo no arranque vacio.
+--
+-- OJO CON `vendedores.activo`: en esta base es TEXT, no boolean, y guarda las
+-- cadenas 'true'/'false'. Un coalesce(v.activo, true) falla con
+-- "COALESCE types text and boolean cannot be matched", que es justo el error
+-- que aparecio al correr este script la primera vez.
+--
+-- Se castea a texto y se compara contra la lista de valores que significan
+-- "si" en las distintas convenciones que conviven en la base: la columna pudo
+-- crearse como texto, como boolean o como 'SI'/'NO' segun quien la creara y
+-- cuando. Se normaliza aqui, una vez, en lugar de confiar en que siempre sea
+-- lo mismo.
 insert into public.crm_vendedores_detalle (vendedor_id, idempresa, activo)
-select v.idvendedor, 1, coalesce(v.activo, true)
+select
+  v.idvendedor,
+  1,
+  coalesce(lower(trim(v.activo::text)) in ('true', 't', 'si', 'sí', '1', 'y', 'yes'), true)
   from public.vendedores v
  where not exists (
    select 1 from public.crm_vendedores_detalle d where d.vendedor_id = v.idvendedor

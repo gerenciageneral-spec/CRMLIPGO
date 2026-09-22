@@ -204,12 +204,17 @@ select id, nombre, tipo, descuento_global, es_default
 -- insert into public.crm_lista_precio_detalle (lista_id, producto_id)
 --   values (1, 1);             -- ninguno  -> error
 
--- 3. La funcion responde (sin lista devuelve el precio base del producto)
+-- 3. La funcion responde (sin lista devuelve el precio base del producto).
+--    OJO: `productos.activo` es TEXT en esta base y guarda 'true'/'false', no
+--    un boolean. Por eso se compara contra texto en vez de usarlo como
+--    condicion directa, que fallaria con "argument of WHERE must be boolean".
 -- select p.id, p.nombre, p.precio_base,
 --        public.crm_resolver_precio(1, p.id, null) as sin_lista,
 --        public.crm_resolver_precio(1, p.id, 1)    as lista_general
 --   from public.productos p
---  where p.id_empresa = 1 and p.activo limit 5;
+--  where p.id_empresa = 1
+--    and lower(trim(p.activo::text)) in ('true','t','si','1')
+--  limit 5;
 
 -- 4. La FK de clientes quedo creada (esperado: 1 fila, convalidated = false)
 select conname, convalidated

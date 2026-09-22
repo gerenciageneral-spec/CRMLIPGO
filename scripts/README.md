@@ -87,3 +87,16 @@ porque no son evidentes y ya causaron problemas:
 - **El nombre de la columna de empresa varía por tabla**: `id_empresa` en
   `clientes`, `productos` y `vendedores`; `idempresa` en `bodegas`. Las tablas
   nuevas del CRM usan todas `idempresa`, sin guion bajo.
+- **`activo` es TEXT, no boolean.** En `vendedores`, `productos` y otras tablas
+  heredadas guarda las cadenas `'true'` / `'false'`. Usarla como condición
+  booleana directa falla con *"argument of WHERE must be type boolean"*, y
+  compararla con `coalesce(x, true)` falla con *"COALESCE types text and
+  boolean cannot be matched"* — este último apareció al correr el 188 por
+  primera vez. Para leerla:
+
+  ```sql
+  lower(trim(tabla.activo::text)) in ('true','t','si','1')
+  ```
+
+  Las tablas nuevas del CRM sí declaran `activo boolean not null default true`,
+  que es lo correcto; la conversión solo hace falta al leer las heredadas.

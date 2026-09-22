@@ -84,6 +84,13 @@ begin
   -- ---------------------------------------------------------------------
   -- 2. VALIDAR LOS NOMBRES DE PRODUCTO CONTRA EL CATALOGO DE LIPGO.
   --    Esta es la validacion que evita romper produccion ajena.
+  --
+  --    NO se filtra por `productos.activo` a proposito: un producto
+  --    descontinuado despues de cotizar sigue existiendo en el catalogo y su
+  --    pedido debe poder despacharse. Lo que rompe a LIPgo es un nombre que NO
+  --    EXISTE, no uno inactivo. (Ademas `activo` es TEXT en esta base, con
+  --    'true'/'false' como cadenas, asi que usarlo como condicion booleana
+  --    directa fallaria.)
   -- ---------------------------------------------------------------------
   select array_agg(distinct d.producto_nombre) into v_faltantes
     from public.crm_pedido_detalle d
