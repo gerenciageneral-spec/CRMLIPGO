@@ -14,7 +14,7 @@ import { useAuth } from "@/components/auth-provider"
 import { getDashboardComercial, type DashboardComercial } from "@/lib/crm-dashboard-actions"
 import { money } from "@/lib/crm-cotizaciones"
 import { GraficaArea } from "@/components/crm/ui/graficas"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -133,44 +133,45 @@ export function DashboardComercialPanel({ onNavigate }: Props) {
         </div>
       )}
 
-      {/* Rejilla que se reparte sola, como la del tablero de LIPgo: con
-          columnas fijas cada tarjeta se estira hasta un cuarto de pantalla y
-          deja un hueco enorme a la derecha del contenido. */}
+      {/* Indicadores compactos, los mismos que usan los modulos: la tarjeta
+          ejecutiva de LIPgo mide el doble de alto y aqui solo empuja el resto
+          del tablero fuera de la pantalla.
+
+          Rejilla que se reparte sola: con columnas fijas cada tarjeta se
+          estiraba hasta un cuarto de pantalla y dejaba un hueco a la derecha
+          del contenido. */}
       <div
         className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
       >
-        <KpiCard
-          icon={TrendingUp}
-          label="Ventas del mes"
-          value={money(ventas.mes)}
-          accent="primary"
-          trend={ventas.variacion}
-          trendHint="vs. mes anterior"
+        <KpiCompacto
+          icono={TrendingUp}
+          etiqueta="Ventas del mes"
+          valor={money(ventas.mes)}
+          detalle="vs. mes anterior"
+          tono="primary"
         />
-        <KpiCard
-          icon={Target}
-          label="Pronóstico del embudo"
-          value={money(embudo.valorPonderado)}
-          accent="info"
-          trendHint={`${embudo.prospectos} prospectos activos`}
+        <KpiCompacto
+          icono={Target}
+          etiqueta="Pronóstico del embudo"
+          valor={money(embudo.valorPonderado)}
+          detalle={`${embudo.prospectos} prospectos activos`}
+          tono="primary"
         />
-        <KpiCard
-          icon={FileText}
-          label="Tasa de cierre"
-          value={cotizaciones.tasaConversion}
-          unit="%"
-          decimals={1}
-          accent={cotizaciones.tasaConversion >= 40 ? "success" : "warning"}
-          trendHint="Cotizaciones ganadas"
+        <KpiCompacto
+          icono={FileText}
+          etiqueta="Tasa de cierre"
+          valor={`${cotizaciones.tasaConversion.toFixed(1)}%`}
+          detalle="Cotizaciones ganadas"
+          tono={cotizaciones.tasaConversion >= 40 ? "success" : "warning"}
         />
-        <KpiCard
-          icon={Wallet}
-          label="Cartera vencida"
-          value={money(cartera.vencida)}
-          accent={cartera.vencida > 0 ? "danger" : "success"}
-          trendHint={`${cartera.porcentajeVencido}% del total`}
-          invertTrend
+        <KpiCompacto
+          icono={Wallet}
+          etiqueta="Cartera vencida"
+          valor={money(cartera.vencida)}
+          detalle={`${cartera.porcentajeVencido}% del total`}
+          // Rojo en cuanto hay algo vencido: que suba es mala noticia.
+          tono={cartera.vencida > 0 ? "danger" : "success"}
           onClick={() => onNavigate?.("Antigüedad de Cartera")}
         />
       </div>

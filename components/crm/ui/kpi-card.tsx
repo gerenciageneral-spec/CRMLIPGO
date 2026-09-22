@@ -1,6 +1,15 @@
 "use client"
 
-// Tarjeta de KPI del CRM.
+// Tarjeta de KPI ejecutiva. SIN USO ACTUAL.
+//
+// Mide unos 145px de alto. Es la del tablero de gerencia de LIPgo, pensada
+// para una pantalla colgada en la pared. En el CRM se probo en los dos
+// tableros y ocupaba demasiado: el usuario quiere leer las cifras de un
+// vistazo y bajar a lo que pide accion, y el doble de alto empuja el resto
+// fuera de la pantalla. Los dos tableros usan ahora `KpiCompacto`.
+//
+// Se conserva por si alguna vez hay una pantalla de direccion a la que le
+// convenga. Si al cabo de unos meses sigue sin usarse, borrala.
 //
 // Copia el patrón del dashboard ejecutivo de LIPgo: card blanca con borde
 // sutil, glow de color difuminado en la esquina, icono en recuadro con su

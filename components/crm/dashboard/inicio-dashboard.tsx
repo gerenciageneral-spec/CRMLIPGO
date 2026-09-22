@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/components/auth-provider"
 import { getDashboardComercial, type DashboardComercial } from "@/lib/crm-dashboard-actions"
 import { money } from "@/lib/crm-cotizaciones"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto } from "@/components/crm/ui/kpi-compacto"
 import { PanelCard } from "@/components/crm/ui/panel-card"
 import { GraficaArea } from "@/components/crm/ui/graficas"
 import { Aparece, ListaEscalonada, ElementoLista } from "@/components/crm/ui/movimiento"
@@ -142,59 +142,59 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
         </div>
       )}
 
-      {/* Rejilla que se reparte sola, como la del tablero de LIPgo, en vez de
-          cuatro columnas fijas. Con columnas fijas cada tarjeta se estiraba
-          hasta un cuarto de la pantalla y quedaba un hueco enorme a la derecha
-          del contenido; con `auto-fit` la tarjeta manda y caben las que quepan.
+      {/* Indicadores compactos tambien en el tablero.
+          La tarjeta ejecutiva de LIPgo mide unos 145px de alto: es la del
+          tablero de gerencia, pensada para pantalla colgada en pared. En el
+          Inicio del CRM el usuario quiere leer las cuatro cifras de un vistazo
+          y bajar a lo que pide accion, y el doble de alto solo empuja el resto
+          fuera de la pantalla. Ademas es la misma tarjeta que usan los
+          modulos, asi que el sistema entero queda coherente.
 
           Escalonado: entran una tras otra, lo que guia la mirada de izquierda
           a derecha en vez de soltarlas de golpe. */}
       <ListaEscalonada
         className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
       >
         <ElementoLista>
-        <KpiCard
-          icon={TrendingUp}
-          label="Ventas del mes"
-          value={money(d?.ventas.mes ?? 0)}
-          accent="primary"
-          trend={d?.ventas.variacion}
-          trendHint="vs. mes anterior"
-        />
+          <KpiCompacto
+            icono={TrendingUp}
+            etiqueta="Ventas del mes"
+            valor={money(d?.ventas.mes ?? 0)}
+            detalle="vs. mes anterior"
+            tono="primary"
+          />
         </ElementoLista>
         <ElementoLista>
-        <KpiCard
-          icon={Target}
-          label="Pronóstico del embudo"
-          value={money(d?.embudo.valorPonderado ?? 0)}
-          accent="info"
-          trendHint={`${d?.embudo.prospectos ?? 0} prospectos activos`}
-        />
+          <KpiCompacto
+            icono={Target}
+            etiqueta="Pronóstico del embudo"
+            valor={money(d?.embudo.valorPonderado ?? 0)}
+            detalle={`${d?.embudo.prospectos ?? 0} prospectos activos`}
+            tono="primary"
+          />
         </ElementoLista>
         <ElementoLista>
-        <KpiCard
-          icon={FileText}
-          label="Tasa de cierre"
-          value={d?.cotizaciones.tasaConversion ?? 0}
-          unit="%"
-          decimals={1}
-          accent={(d?.cotizaciones.tasaConversion ?? 0) >= 40 ? "success" : "warning"}
-          trendHint="Cotizaciones ganadas"
-          onClick={() => onSelectModule?.("Cotizaciones")}
-        />
+          <KpiCompacto
+            icono={FileText}
+            etiqueta="Tasa de cierre"
+            valor={`${(d?.cotizaciones.tasaConversion ?? 0).toFixed(1)}%`}
+            detalle="Cotizaciones ganadas"
+            tono={(d?.cotizaciones.tasaConversion ?? 0) >= 40 ? "success" : "warning"}
+            onClick={() => onSelectModule?.("Cotizaciones")}
+          />
         </ElementoLista>
         <ElementoLista>
-        <KpiCard
-          icon={Wallet}
-          label="Cartera vencida"
-          value={money(d?.cartera.vencida ?? 0)}
-          accent={(d?.cartera.vencida ?? 0) > 0 ? "danger" : "success"}
-          trendHint={`${d?.cartera.porcentajeVencido ?? 0}% del total`}
-          // Subir cartera vencida es mala noticia: sin esto se pinta en verde.
-          invertTrend
-          onClick={() => onSelectModule?.("Antigüedad de Cartera")}
-        />
+          <KpiCompacto
+            icono={Wallet}
+            etiqueta="Cartera vencida"
+            valor={money(d?.cartera.vencida ?? 0)}
+            detalle={`${d?.cartera.porcentajeVencido ?? 0}% del total`}
+            // Rojo en cuanto hay algo vencido: que suba es mala noticia y el
+            // color debe decirlo sin que haya que leer la cifra.
+            tono={(d?.cartera.vencida ?? 0) > 0 ? "danger" : "success"}
+            onClick={() => onSelectModule?.("Antigüedad de Cartera")}
+          />
         </ElementoLista>
       </ListaEscalonada>
 
