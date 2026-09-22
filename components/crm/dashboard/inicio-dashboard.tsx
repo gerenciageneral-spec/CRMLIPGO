@@ -23,6 +23,7 @@ import { PanelCard } from "@/components/crm/ui/panel-card"
 import { GraficaArea } from "@/components/crm/ui/graficas"
 import { Aparece, ListaEscalonada, ElementoLista } from "@/components/crm/ui/movimiento"
 import { EncabezadoEjecutivo } from "@/components/crm/ui/encabezado-ejecutivo"
+import { SaludoHero } from "@/components/crm/ui/saludo-hero"
 import { ModuleCards } from "@/components/module-cards"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -38,7 +39,7 @@ interface Props {
 }
 
 export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
-  const { selectedEmpresaId } = useAuth()
+  const { selectedEmpresaId, selectedEmpresaNombre, profile } = useAuth()
   const empresaId = selectedEmpresaId ?? 1
 
   const [datos, setDatos] = useState<DashboardComercial | null>(null)
@@ -92,6 +93,10 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
 
   return (
     <div className="space-y-5">
+      {/* La banda de bienvenida va primero, igual que en LIPgo: es lo que hace
+          que al entrar se reconozca la misma casa. */}
+      <SaludoHero nombre={profile?.nombre ?? undefined} empresa={selectedEmpresaNombre ?? undefined} />
+
       <EncabezadoEjecutivo
         titulo="Centro de Gestión Comercial"
         refrescando={refrescando}
