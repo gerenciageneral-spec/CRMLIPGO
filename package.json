@@ -6,8 +6,7 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "check:aprendizaje": "node scripts/check-aprendizaje.mjs"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.92",
