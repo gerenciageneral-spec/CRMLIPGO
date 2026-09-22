@@ -608,3 +608,6 @@ const SEV: Record<AtencionItem["sev"], { background: string; color: string }> = 
   warn: { background: "rgba(255,207,94,.16)", color: "#ffcf5e" },
   info: { background: "rgba(0,194,220,.16)", color: "#3fe0ee" },
 }
+
+// Export por defecto para que dynamic() del registry pueda cargarlo.
+export default LipAiAssistant

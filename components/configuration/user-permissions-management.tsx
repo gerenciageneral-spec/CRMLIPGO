@@ -1241,3 +1241,6 @@ export function UserPermissionsManagement() {
     </TooltipProvider>
   )
 }
+
+// Export por defecto para que dynamic() del registry pueda cargarlo.
+export default UserPermissionsManagement
