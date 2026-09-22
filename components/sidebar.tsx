@@ -2,22 +2,16 @@
 
 import {
   Home,
-  Package,
   FileText,
   Search,
   LayoutDashboard,
   Settings,
   Menu,
   X,
-  Truck,
   ChevronDown,
   Users,
   Wallet,
   BadgeCheck,
-  Layers,
-  ShieldCheck,
-  Banknote,
-  GraduationCap,
 } from "lucide-react"
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
@@ -270,30 +264,24 @@ export function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionsLoaded, allowedModules, protectedModules])
 
-  // REORG (2026-07-03): menú ordenado por FLUJO OPERATIVO (entrada → almacén →
-  // producción → salida → soporte → config). Los grupos "Vehículos", "Báscula" y
-  // "Auditoría" se absorbieron en otros grupos; sus módulos y permisos se
-  // conservan (viajan por el `name` del módulo).
-  // REORG (2026-07-29): "Compensación" vuelve como grupo propio — reúne todo lo
-  // que liquida/paga al colaborador (nómina, liquidaciones, parafiscales,
-  // revisión de nómina, vacaciones), antes disperso dentro de Gestión Humana.
+  // Items del menu lateral, en el orden del flujo comercial: primero lo que
+  // se mira a diario, luego la venta, el cliente, el cobro, y al final lo que
+  // se configura una vez.
+  //
+  // OJO: `key` debe coincidir con el `key` de un grupo de lib/dashboard-data.ts.
+  // Un item cuyo key no exista alli se filtra y NO APARECE: fue justo lo que
+  // paso al heredar este archivo de LIPgo, que listaba sus grupos operativos
+  // ("despachos", "inventarios", "rrhh", "sst"...) y dejaba el menu con solo
+  // "Inicio", porque ninguno existe ya.
   const allMenuItems = [
     { key: null, label: "Inicio", icon: Home },
-    { key: "integral" as GroupKey, label: "Torre de Control", icon: LayoutDashboard },
-    { key: "pedidos" as GroupKey, label: "Pedidos", icon: FileText },
-    { key: "despachos" as GroupKey, label: "Recepción y Despacho", icon: Truck },
-    { key: "inventarios" as GroupKey, label: "Almacenamiento", icon: Package },
-    { key: "mrp" as GroupKey, label: "MRP · Materiales", icon: Layers },
-    { key: "produccion" as GroupKey, label: "Producción", icon: Package },
-    { key: "lip" as GroupKey, label: "Operación LIP", icon: Users },
-    { key: "financiera" as GroupKey, label: "Gestión Financiera", icon: Wallet },
-    { key: "rrhh" as GroupKey, label: "Gestión Humana", icon: Users },
-    { key: "compensacion" as GroupKey, label: "Compensación", icon: Banknote },
-    { key: "certificaciones_lip" as GroupKey, label: "Certificaciones · SIG", icon: BadgeCheck },
-    { key: "sst" as GroupKey, label: "Seguridad y Salud (SST)", icon: ShieldCheck },
+    { key: "inicio" as GroupKey, label: "Tablero", icon: LayoutDashboard },
+    { key: "prospectos" as GroupKey, label: "Prospectos", icon: Users },
+    { key: "ventas" as GroupKey, label: "Ventas", icon: FileText },
+    { key: "clientes" as GroupKey, label: "Clientes", icon: Users },
+    { key: "cartera" as GroupKey, label: "Cartera", icon: Wallet },
+    { key: "inteligencia" as GroupKey, label: "Inteligencia", icon: BadgeCheck },
     { key: "configuracion" as GroupKey, label: "Configuración", icon: Settings },
-    // Guia de usuario: va de ultimo porque es soporte, no operacion.
-    { key: "aprendizaje" as GroupKey, label: "Aprendizaje", icon: GraduationCap },
   ]
 
   // Filtra los items del menu superior para ocultar los grupos cuyos
@@ -305,21 +293,15 @@ export function Sidebar({
   })
 
   // REORG visual (estilo Odoo): color de dominio por grupo para los íconos.
+  // Color de dominio por grupo, para el icono y el heroe de la cabecera.
   const GROUP_TINT: Record<string, string> = {
-    integral: "#9fb6cc",
-    pedidos: "#8ea6f0",
-    despachos: "#5fc8e6",
-    inventarios: "#3fd7cf",
-    mrp: "#e0b45c",
-    produccion: "#e79a5c",
-    lip: "#b199ee",
-    financiera: "#5fd398",
-    rrhh: "#ed94c2",
-    compensacion: "#f0cf5c",
-    certificaciones_lip: "#f0876a",
-    sst: "#e0564e",
+    inicio: "#9fb6cc",
+    prospectos: "#b199ee",
+    ventas: "#8ea6f0",
+    clientes: "#5fc8e6",
+    cartera: "#5fd398",
+    inteligencia: "#e0b45c",
     configuracion: "#9aa6b3",
-    aprendizaje: "#7fb2f0",
   }
 
   // Color del héroe = tinte del área activa (o cian de marca en Inicio). Alimenta
