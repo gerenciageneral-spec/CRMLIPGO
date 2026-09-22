@@ -14,7 +14,7 @@
 import { PermissionGuard } from "@/components/permission-guard"
 import { ModulePlaceholder } from "@/components/module-placeholder"
 import { ModulesView } from "@/components/modules-view"
-import { ModuleCards } from "@/components/module-cards"
+import { InicioDashboard } from "@/components/crm/dashboard/inicio-dashboard"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { getModuleEntry } from "@/lib/module-registry"
 import type { GroupKey } from "@/lib/dashboard-data"
@@ -32,11 +32,13 @@ export function MainContent({
   onSelectModule,
   onSelectGroup,
 }: MainContentProps) {
-  // Inicio: tarjetas de los grupos a los que el usuario tiene acceso.
+  // Inicio: el tablero comercial, con las areas debajo para navegar. Antes
+  // era solo la rejilla de areas, que obliga a entrar a un modulo para saber
+  // si algo va mal.
   if (!selectedGroup) {
     return (
       <div className="p-4 md:p-6">
-        <ModuleCards onSelectGroup={onSelectGroup} onSelectModule={onSelectModule} />
+        <InicioDashboard onSelectGroup={onSelectGroup} onSelectModule={onSelectModule} />
       </div>
     )
   }

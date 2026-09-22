@@ -1,63 +1,81 @@
 "use client"
 
-// Tarjeta de KPI del CRM — UNICA en el proyecto.
+// Tarjeta de KPI del CRM.
 //
-// POR QUE ESTA: LIPgo tenia DOS kpi-card con APIs incompatibles
-// (dashboard-gerencia con accent + count-up, y orders/dashboard-pedidos con
-// variant + tokens CSS). Mantener dos significaba que dos dashboards del mismo
-// sistema se vieran distintos. Esta unifica: se queda la API rica de
-// dashboard-gerencia (count-up, invertTrend, decimales) pero pintando con los
-// tokens CSS var(--chart-N) que usaba la de pedidos, que son los que sobreviven
-// al cambio de tema claro/oscuro en vez de quedar fijos en una paleta.
+// Copia el patrón del dashboard ejecutivo de LIPgo: card blanca con borde
+// sutil, glow de color difuminado en la esquina, icono en recuadro con su
+// tinte pastel, valor grande con count-up y tendencia con flecha.
+//
+// Se conservan sus dos decisiones buenas:
+//   - `invertTrend`, para los KPI donde SUBIR ES MALO (cartera vencida,
+//     prospectos estancados). Sin eso un aumento de mora se pinta en verde.
+//   - El valor numérico se anima; el de texto se muestra literal.
 
 import type { LucideIcon } from "lucide-react"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCountUp, formatAnimatedNumber } from "./use-count-up"
 
-/** Acentos semanticos. Cada uno mapea a un token --chart-N del tema. */
-export type KpiAccent = "primary" | "success" | "warning" | "danger" | "info" | "neutral"
+export type KpiAccent =
+  | "primary" | "success" | "warning" | "danger" | "info" | "neutral"
 
 export interface KpiCardProps {
   icon: LucideIcon
-  /** Etiqueta corta bajo el valor (ej. "Cartera vencida"). */
   label: string
-  /** Numero -> se anima con count-up. String -> se pinta tal cual. */
+  /** Número → se anima. String → se pinta tal cual (ya formateado). */
   value: string | number
-  /** Sufijo pegado al valor: "%", "t", "COP". */
   unit?: string
-  /** Decimales a preservar en la animacion. Solo si `value` es numero. */
   decimals?: number
-  /** Variacion respecto al periodo anterior. Se formatea "+12%". */
   trend?: number
-  /** Texto del trend: "vs. mes anterior", "Meta: 95%". */
   trendHint?: string
-  /**
-   * Invierte el color del trend. Necesario en KPIs donde SUBIR ES MALO
-   * (cartera vencida, prospectos estancados, dias de mora). Sin esto, un
-   * aumento de cartera vencida se pintaria en verde, que es justo lo
-   * contrario de lo que el gerente necesita ver.
-   */
+  /** true cuando subir es mala noticia. */
   invertTrend?: boolean
   accent?: KpiAccent
-  /** Hace la tarjeta clickeable (ej. ir al modulo que detalla el KPI). */
   onClick?: () => void
   className?: string
 }
 
-/** Acento -> token del tema. Los var(--chart-N) los define styles/globals.css
- *  y cambian solos en modo oscuro; por eso no se hardcodean colores. */
-const ACCENT: Record<KpiAccent, { icono: string; anillo: string }> = {
-  primary: { icono: "bg-[var(--chart-1)]/12 text-[var(--chart-1)]", anillo: "ring-[var(--chart-1)]/20" },
-  success: { icono: "bg-[var(--chart-2)]/12 text-[var(--chart-2)]", anillo: "ring-[var(--chart-2)]/20" },
-  warning: { icono: "bg-[var(--chart-3)]/12 text-[var(--chart-3)]", anillo: "ring-[var(--chart-3)]/20" },
-  danger: { icono: "bg-destructive/12 text-destructive", anillo: "ring-destructive/20" },
-  info: { icono: "bg-[var(--chart-4)]/12 text-[var(--chart-4)]", anillo: "ring-[var(--chart-4)]/20" },
-  neutral: { icono: "bg-muted text-muted-foreground", anillo: "ring-border" },
+/** Tintes pastel sobre card blanca, con texto oscuro para contraste. Son los
+ *  mismos tonos del dashboard de LIPgo, renombrados a la semántica del CRM. */
+const ACENTO: Record<
+  KpiAccent,
+  { iconoBg: string; iconoFg: string; iconoBorde: string; anillo: string; glow: string }
+> = {
+  primary: {
+    iconoBg: "bg-[#5bc0de]/15", iconoFg: "text-[#0aa1c4]", iconoBorde: "border-[#5bc0de]/40",
+    anillo: "hover:ring-[#5bc0de]/30", glow: "before:bg-[#5bc0de]/20",
+  },
+  success: {
+    iconoBg: "bg-emerald-100", iconoFg: "text-emerald-700", iconoBorde: "border-emerald-300",
+    anillo: "hover:ring-emerald-300/60", glow: "before:bg-emerald-200/40",
+  },
+  warning: {
+    iconoBg: "bg-amber-100", iconoFg: "text-amber-700", iconoBorde: "border-amber-300",
+    anillo: "hover:ring-amber-300/60", glow: "before:bg-amber-200/40",
+  },
+  danger: {
+    iconoBg: "bg-rose-100", iconoFg: "text-rose-700", iconoBorde: "border-rose-300",
+    anillo: "hover:ring-rose-300/60", glow: "before:bg-rose-200/40",
+  },
+  info: {
+    iconoBg: "bg-violet-100", iconoFg: "text-violet-700", iconoBorde: "border-violet-300",
+    anillo: "hover:ring-violet-300/60", glow: "before:bg-violet-200/40",
+  },
+  neutral: {
+    iconoBg: "bg-slate-100", iconoFg: "text-slate-600", iconoBorde: "border-slate-300",
+    anillo: "hover:ring-slate-300/60", glow: "before:bg-slate-200/40",
+  },
+}
+
+function formatearTendencia(trend: number): string {
+  const signo = trend > 0 ? "+" : ""
+  // Se redondea a un decimal para no mostrar "12.0000000001".
+  const n = Number.isInteger(trend) ? trend : Math.round(trend * 10) / 10
+  return `${signo}${n}%`
 }
 
 export function KpiCard({
-  icon: Icon,
+  icon: Icono,
   label,
   value,
   unit,
@@ -69,18 +87,32 @@ export function KpiCard({
   onClick,
   className,
 }: KpiCardProps) {
+  const a = ACENTO[accent]
+
   const esNumero = typeof value === "number" && Number.isFinite(value)
   const animado = useCountUp(esNumero ? (value as number) : 0)
   const mostrado = esNumero ? formatAnimatedNumber(animado, decimals) : String(value)
 
-  // El signo decide el color; invertTrend lo da vuelta para los KPIs donde
-  // subir es mala noticia.
+  // El signo decide el color; invertTrend lo da vuelta.
   const hayTrend = typeof trend === "number" && Number.isFinite(trend)
-  const bueno = hayTrend ? (invertTrend ? trend < 0 : trend > 0) : false
-  const malo = hayTrend ? (invertTrend ? trend > 0 : trend < 0) : false
-  const IconoTrend = !hayTrend || trend === 0 ? Minus : trend > 0 ? TrendingUp : TrendingDown
+  let tono: "bueno" | "malo" | "neutro" = "neutro"
+  if (hayTrend && trend !== 0) {
+    const positivo = trend > 0
+    tono = (invertTrend ? !positivo : positivo) ? "bueno" : "malo"
+  }
 
-  const tono = ACCENT[accent]
+  const IconoTrend =
+    !hayTrend || trend === 0
+      ? Minus
+      : (trend > 0 && !invertTrend) || (trend < 0 && invertTrend)
+        ? TrendingUp
+        : TrendingDown
+
+  const colorTrend =
+    tono === "bueno" ? "text-emerald-600"
+      : tono === "malo" ? "text-rose-600"
+        : "text-muted-foreground"
+
   const clickeable = typeof onClick === "function"
 
   return (
@@ -91,7 +123,7 @@ export function KpiCard({
       onKeyDown={
         clickeable
           ? (e) => {
-              // Accesibilidad: si es clickeable con mouse, debe serlo con teclado.
+              // Lo que se pulsa con el ratón debe poder pulsarse con teclado.
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault()
                 onClick!()
@@ -100,40 +132,49 @@ export function KpiCard({
           : undefined
       }
       className={cn(
-        "relative rounded-xl border bg-card p-4 ring-1 ring-inset transition-shadow",
-        tono.anillo,
-        clickeable && "cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
+        // Glow difuminado en la esquina: es lo que le quita la planitud a la
+        // tarjeta sin recargarla.
+        "before:pointer-events-none before:absolute before:-right-10 before:-top-10",
+        "before:h-32 before:w-32 before:rounded-full before:opacity-70 before:blur-2xl",
+        a.glow,
+        "transition-all duration-300 hover:shadow-md hover:ring-1",
+        a.anillo,
+        clickeable && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className={cn("rounded-lg p-2", tono.icono)}>
-          <Icon className="h-4 w-4" aria-hidden="true" />
-        </div>
-
-        {hayTrend && (
-          <span
+      <div className="relative p-4 md:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-              bueno && "bg-[var(--chart-2)]/12 text-[var(--chart-2)]",
-              malo && "bg-destructive/12 text-destructive",
-              !bueno && !malo && "bg-muted text-muted-foreground",
+              "flex h-10 w-10 items-center justify-center rounded-xl border",
+              a.iconoBg, a.iconoBorde,
             )}
           >
-            <IconoTrend className="h-3 w-3" aria-hidden="true" />
-            {trend > 0 ? "+" : ""}
-            {trend}%
+            <Icono className={cn("h-5 w-5", a.iconoFg)} aria-hidden="true" />
+          </div>
+
+          {hayTrend && (
+            <div className={cn("flex items-center gap-1 text-xs font-semibold", colorTrend)}>
+              <IconoTrend className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{formatearTendencia(trend)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-baseline gap-1.5">
+          <span className="text-2xl font-bold tracking-tight tabular-nums text-foreground md:text-3xl">
+            {mostrado}
           </span>
-        )}
-      </div>
+          {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
+        </div>
 
-      <div className="mt-3 flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{mostrado}</span>
-        {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+        <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
+        {trendHint && <p className="mt-0.5 text-[11px] text-muted-foreground">{trendHint}</p>}
       </div>
-
-      <p className="mt-0.5 text-sm text-muted-foreground">{label}</p>
-      {trendHint && <p className="mt-1 text-xs text-muted-foreground/80">{trendHint}</p>}
     </div>
   )
 }
+
+export default KpiCard
