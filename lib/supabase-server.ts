@@ -6,32 +6,39 @@ import { cookies } from "next/headers"
 // de la BD el cliente resolvía cada tabla a `never`. Type-only, no afecta runtime.
 type DBClient = SupabaseClient<any, any, any>
 
-export function createServerClient(): DBClient {
-  const cookieStore = cookies()
+/**
+ * Cliente de Supabase para el SERVIDOR, que lee la sesión de las cookies.
+ *
+ * ES ASÍNCRONO y hay que esperarlo. En Next.js 16 `cookies()` devuelve una
+ * promesa, así que no hay forma de construirlo de manera síncrona.
+ *
+ * USA LA API getAll/setAll, que es la que espera @supabase/ssr 0.8. La versión
+ * anterior de este archivo implementaba get/set/remove, la API de las
+ * versiones 0.x antiguas: la librería no la reconocía, nunca leía la cookie de
+ * sesión y getUser() devolvía null aunque el usuario estuviera dentro. El
+ * efecto visible era que ningún módulo cargaba y el menú salía vacío, porque
+ * todo el sistema de permisos cuelga de esa lectura.
+ */
+export async function createServerClient(): Promise<DBClient> {
+  const cookieStore = await cookies()
 
   return createSupabaseServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        async get(name: string) {
-          const cookie = await cookieStore
-          return cookie.get(name)?.value
+        getAll() {
+          return cookieStore.getAll()
         },
-        async set(name: string, value: string, options: any) {
+        setAll(cookiesToSet) {
           try {
-            const cookie = await cookieStore
-            cookie.set({ name, value, ...options })
-          } catch (error) {
-            // Server component, ignore
-          }
-        },
-        async remove(name: string, options: any) {
-          try {
-            const cookie = await cookieStore
-            cookie.set({ name, value: "", ...options })
-          } catch (error) {
-            // Server component, ignore
+            for (const { name, value, options } of cookiesToSet) {
+              cookieStore.set(name, value, options)
+            }
+          } catch {
+            // Desde un Server Component las cookies son de solo lectura y esto
+            // lanza. Se ignora a propósito: el refresco de sesión lo hace el
+            // middleware, que sí puede escribirlas.
           }
         },
       },

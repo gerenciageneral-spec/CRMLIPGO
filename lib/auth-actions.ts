@@ -65,7 +65,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 }
 
 export async function getCurrentUser() {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   try {
     const {
@@ -85,7 +85,7 @@ export async function getCurrentUser() {
 }
 
 export async function signIn(email: string, password: string) {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   try {
     console.log("[v0] signIn: Attempting authentication...")
@@ -108,7 +108,7 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signOut() {
-  const supabase = createServerClient()
+  const supabase = await createServerClient()
 
   try {
     const { error } = await supabase.auth.signOut()

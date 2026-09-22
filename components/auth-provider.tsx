@@ -48,44 +48,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [selectedEmpresaId, setSelectedEmpresaIdState] = useState<number | null>(null)
   const [loadingEmpresas, setLoadingEmpresas] = useState(true)
 
+  // SIN adaptador de cookies a propósito.
+  //
+  // La versión anterior implementaba get/set/remove con un parseo manual de
+  // document.cookie. Esa es la API de las versiones antiguas de @supabase/ssr;
+  // la 0.8 espera getAll/setAll y simplemente ignoraba aquel objeto. El
+  // resultado era que la sesión se guardaba en un formato que el servidor no
+  // sabía leer: el usuario entraba, pero cada server action lo veía como
+  // anónimo, ningún módulo cargaba y el menú salía vacío.
+  //
+  // createBrowserClient ya maneja las cookies solo, y en el formato que el
+  // cliente de servidor espera. No hay que ayudarle.
   const supabase = useMemo(
     () =>
       createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            get(name: string) {
-              // Get cookie from browser (guard SSR: no hay document en el servidor)
-              if (typeof document === "undefined") return undefined
-              const value = `; ${document.cookie}`
-              const parts = value.split(`; ${name}=`)
-              if (parts.length === 2) return parts.pop()?.split(";").shift()
-              return undefined
-            },
-            set(name: string, value: string, options: any) {
-              // Set cookie in browser
-              if (typeof document === "undefined") return
-              let cookieString = `${name}=${value}`
-              if (options?.maxAge) cookieString += `; max-age=${options.maxAge}`
-              if (options?.path) cookieString += `; path=${options.path}`
-              if (options?.domain) cookieString += `; domain=${options.domain}`
-              if (options?.sameSite) cookieString += `; samesite=${options.sameSite}`
-              if (options?.secure) cookieString += "; secure"
-              document.cookie = cookieString
-              console.log("[v0] Set cookie:", name)
-            },
-            remove(name: string, options: any) {
-              // Remove cookie from browser
-              if (typeof document === "undefined") return
-              let cookieString = `${name}=; max-age=0`
-              if (options?.path) cookieString += `; path=${options.path}`
-              if (options?.domain) cookieString += `; domain=${options.domain}`
-              document.cookie = cookieString
-              console.log("[v0] Removed cookie:", name)
-            },
-          },
-        },
       ),
     [],
   )

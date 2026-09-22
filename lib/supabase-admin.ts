@@ -38,7 +38,7 @@ function buildClient(auditUser?: string): DBClient {
 // (cron/jobs/contextos sin cookie) → auditoría 'sistema'.
 const resolverActorId = cache(async (): Promise<string | null> => {
   try {
-    const sb = createServerClient()
+    const sb = await createServerClient()
     const {
       data: { user },
     } = await sb.auth.getUser()
