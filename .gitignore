@@ -24,3 +24,6 @@ node_modules
 /*.zip
 # Artefacto de build de TypeScript
 tsconfig.tsbuildinfo
+
+# Artefactos de compilacion
+tsconfig.tsbuildinfo
