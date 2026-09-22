@@ -8,8 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Loader2, Search, Send, CheckCircle2, Clock, AlertTriangle, ExternalLink, FileText,
-} from "lucide-react"
+  Loader2, Search, Send, CheckCircle2, Clock, AlertTriangle, ExternalLink, FileText, ClipboardList } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getPedidos, enviarPedidoALipgo } from "@/lib/crm-pedidos-actions"
 import {
@@ -27,14 +26,17 @@ import {
 } from "@/components/ui/tooltip"
 import { toast } from "@/hooks/use-toast"
 
-const BADGE: Record<EstadoPedido, { variant: "default" | "secondary" | "outline" | "destructive"; clase?: string }> = {
-  borrador: { variant: "outline" },
-  pendiente_autorizacion: { variant: "secondary" },
-  autorizado_parcial: { variant: "outline", clase: "border-[var(--chart-3)] text-[var(--chart-3)]" },
-  autorizado: { variant: "default", clase: "bg-[var(--chart-2)] hover:bg-[var(--chart-2)]" },
-  rechazado: { variant: "destructive" },
-  enviado_lipgo: { variant: "default" },
-  anulado: { variant: "outline" },
+// Color por estado, al estilo de LIPgo. El ambar de "falta una firma" y el
+// azul de "enviado a operacion" distinguen de un vistazo lo que espera accion
+// de lo que ya termino su recorrido.
+const BADGE: Record<EstadoPedido, string> = {
+  borrador: "bg-slate-50 text-slate-700 border-slate-200",
+  pendiente_autorizacion: "bg-blue-50 text-blue-700 border-blue-200",
+  autorizado_parcial: "bg-amber-50 text-amber-700 border-amber-200",
+  autorizado: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rechazado: "bg-red-50 text-red-700 border-red-200",
+  enviado_lipgo: "bg-violet-50 text-violet-700 border-violet-200",
+  anulado: "bg-slate-50 text-slate-500 border-slate-200",
 }
 
 export function PedidosPanel() {
@@ -96,11 +98,16 @@ export function PedidosPanel() {
     <TooltipProvider delayDuration={200}>
       <div className="space-y-5">
         <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Pedidos</h1>
-          <p className="text-sm text-muted-foreground">
-            Un pedido viaja a operación cuando tiene las dos autorizaciones
-          </p>
-        </header>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <ClipboardList className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Pedidos</h1>
+            <p className="text-sm text-muted-foreground">Un pedido viaja a operación cuando tiene las dos autorizaciones</p>
+          </div>
+        </div>
+      </header>
 
         <div className="flex flex-wrap gap-2">
           <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
@@ -143,13 +150,13 @@ export function PedidosPanel() {
           <Card>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Pago</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Firmas</TableHead>
-                  <TableHead>Estado</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs font-semibold">Número</TableHead>
+                  <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                  <TableHead className="text-xs font-semibold">Pago</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                  <TableHead className="text-xs font-semibold">Firmas</TableHead>
+                  <TableHead className="text-xs font-semibold">Estado</TableHead>
                   <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
@@ -158,7 +165,7 @@ export function PedidosPanel() {
                 {visibles.map((p) => {
                   const faltan = firmasPendientes(p)
                   const listo = p.estado === "autorizado" && !p.idpedido_lipgo
-                  const badge = BADGE[p.estado]
+                  const tono = BADGE[p.estado]
 
                   return (
                     <TableRow key={p.id}>
@@ -183,7 +190,7 @@ export function PedidosPanel() {
                       </TableCell>
 
                       <TableCell>
-                        <Badge variant={badge.variant} className={badge.clase}>
+                        <Badge variant="outline" className={`font-medium ${tono}`}>
                           {ESTADO_PEDIDO_LABEL[p.estado]}
                         </Badge>
                         {p.error_lipgo && (

@@ -9,8 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Loader2, Plus, Search, MapPin, Phone, Mail, Calendar, Trash2, Package,
-} from "lucide-react"
+  Loader2, Plus, Search, MapPin, Phone, Mail, Calendar, Trash2, Package, UserPlus } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import {
   getProspectos, getEtapas, crearProspecto,
@@ -91,11 +90,14 @@ export function ProspectosPanel() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Prospectos</h1>
-          <p className="text-sm text-muted-foreground">
-            {prospectos.length} registrado{prospectos.length === 1 ? "" : "s"}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <UserPlus className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Prospectos</h1>
+            <p className="text-sm text-muted-foreground">{prospectos.length} registrado{prospectos.length === 1 ? "" : "s"}</p>
+          </div>
         </div>
 
         <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>

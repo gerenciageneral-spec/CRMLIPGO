@@ -86,12 +86,17 @@ export function AutorizacionesPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Autorizar pedidos</h1>
-        <p className="text-sm text-muted-foreground">
-          Puedes firmar como {misRoles.map((r) => ROL_LABEL[r]).join(" y ")}
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Stamp className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Autorizar pedidos</h1>
+            <p className="text-sm text-muted-foreground">Puedes firmar como {misRoles.map((r) => ROL_LABEL[r]).join(" y ")}
           {" · "}
-          {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} esperando
-        </p>
+          {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} esperando</p>
+          </div>
+        </div>
       </header>
 
       {pedidos.length === 0 ? (

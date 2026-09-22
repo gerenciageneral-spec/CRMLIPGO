@@ -11,8 +11,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Loader2, Plus, Phone, Mail, MessageSquare, Users, FileText, MapPin, Search,
-} from "lucide-react"
+  Loader2, Plus, Phone, Mail, MessageSquare, Users, FileText, MapPin, Search, ClipboardList } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getActividades, registrarActividad, getProspectos } from "@/lib/crm-prospectos-actions"
 import {
@@ -84,11 +83,14 @@ export function ActividadesPanel() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Actividades</h1>
-          <p className="text-sm text-muted-foreground">
-            Todo lo que se ha hecho con cada prospecto, en orden
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <ClipboardList className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Actividades</h1>
+            <p className="text-sm text-muted-foreground">Todo lo que se ha hecho con cada prospecto, en orden</p>
+          </div>
         </div>
 
         <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>

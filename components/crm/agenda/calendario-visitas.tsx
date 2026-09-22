@@ -137,11 +137,14 @@ export function CalendarioVisitas() {
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Calendario de visitas</h1>
-          <p className="text-sm text-muted-foreground">
-            {citas.filter((c) => c.estado === "pendiente").length} pendiente(s) en el período
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <CalendarDays className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Calendario de visitas</h1>
+            <p className="text-sm text-muted-foreground">{citas.filter((c) => c.estado === "pendiente").length} pendiente(s) en el período</p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

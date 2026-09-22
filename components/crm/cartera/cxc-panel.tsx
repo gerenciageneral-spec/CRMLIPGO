@@ -79,10 +79,15 @@ export function CxcPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Cuentas por cobrar</h1>
-        <p className="text-sm text-muted-foreground">
-          La cartera nace cuando un pedido a crédito viaja a operación
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Wallet className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Cuentas por cobrar</h1>
+            <p className="text-sm text-muted-foreground">La cartera nace cuando un pedido a crédito viaja a operación</p>
+          </div>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -137,13 +142,13 @@ export function CxcPanel() {
         <Card>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Factura</TableHead>
-                <TableHead>Vence</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="text-right">Saldo</TableHead>
-                <TableHead>Estado</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                <TableHead className="text-xs font-semibold">Factura</TableHead>
+                <TableHead className="text-xs font-semibold">Vence</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Saldo</TableHead>
+                <TableHead className="text-xs font-semibold">Estado</TableHead>
                 <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
@@ -195,7 +200,18 @@ export function CxcPanel() {
                     </TableCell>
 
                     <TableCell>
-                      <Badge variant={c.estado === "parcial" ? "secondary" : "outline"}>
+                      {/* Vencida en rojo, abonada en azul, al dia en gris:
+                          el color dice que hacer sin leer la fila entera. */}
+                      <Badge
+                        variant="outline"
+                        className={`font-medium ${
+                          vencida
+                            ? "bg-red-50 text-red-700 border-red-200"
+                            : c.estado === "parcial"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-slate-50 text-slate-700 border-slate-200"
+                        }`}
+                      >
                         {ESTADO_CUENTA_LABEL[c.estado]}
                       </Badge>
                     </TableCell>

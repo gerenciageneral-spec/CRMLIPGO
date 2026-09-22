@@ -87,10 +87,15 @@ export function VendedoresPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Vendedores</h1>
-        <p className="text-sm text-muted-foreground">
-          Zona, meta y desempeño del mes en curso
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <UserCheck className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Vendedores</h1>
+            <p className="text-sm text-muted-foreground">Zona, meta y desempeño del mes en curso</p>
+          </div>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -90,11 +90,16 @@ export function ClientesPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
-        <p className="text-sm text-muted-foreground">
-          Cupo de crédito, lista de precios y ubicación. Los datos fiscales se
-          administran en el sistema operativo.
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Users className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Clientes</h1>
+            <p className="text-sm text-muted-foreground">Cupo de crédito, lista de precios y ubicación. Los datos fiscales se
+          administran en el sistema operativo.</p>
+          </div>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -127,11 +132,11 @@ export function ClientesPanel() {
         <Card>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Contacto</TableHead>
-                <TableHead>Lista</TableHead>
-                <TableHead className="text-right">Cupo</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                <TableHead className="text-xs font-semibold">Contacto</TableHead>
+                <TableHead className="text-xs font-semibold">Lista</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Cupo</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>

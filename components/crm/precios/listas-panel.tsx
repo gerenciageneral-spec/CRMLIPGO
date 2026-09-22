@@ -62,11 +62,14 @@ export function ListasPanel() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Listas de precios</h1>
-          <p className="text-sm text-muted-foreground">
-            El precio que ve el vendedor al cotizar sale de la lista del cliente
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Tag className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Listas de precios</h1>
+            <p className="text-sm text-muted-foreground">El precio que ve el vendedor al cotizar sale de la lista del cliente</p>
+          </div>
         </div>
 
         <Dialog open={nuevaAbierta} onOpenChange={setNuevaAbierta}>
@@ -411,11 +414,11 @@ function EditorPrecios({
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead className="text-right">Base</TableHead>
-                  <TableHead className="w-32">Precio fijo</TableHead>
-                  <TableHead className="w-24">Descuento</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs font-semibold">Producto</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Base</TableHead>
+                  <TableHead className="text-xs font-semibold w-32">Precio fijo</TableHead>
+                  <TableHead className="text-xs font-semibold w-24">Descuento</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -522,11 +525,11 @@ function VistaPrevia({
         ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Producto</TableHead>
-                <TableHead className="text-right">Base</TableHead>
-                <TableHead className="text-right">Con esta lista</TableHead>
-                <TableHead className="text-right">Dif.</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Producto</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Base</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Con esta lista</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Dif.</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

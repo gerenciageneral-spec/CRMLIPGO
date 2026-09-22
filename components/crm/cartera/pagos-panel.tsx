@@ -87,10 +87,15 @@ export function PagosPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Registrar pago</h1>
-        <p className="text-sm text-muted-foreground">
-          Busca el cliente y aplica el abono sobre la factura que corresponda
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Banknote className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Registrar pago</h1>
+            <p className="text-sm text-muted-foreground">Busca el cliente y aplica el abono sobre la factura que corresponda</p>
+          </div>
+        </div>
       </header>
 
       <div className="relative max-w-sm">

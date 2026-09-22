@@ -32,13 +32,16 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 
-const BADGE: Record<EstadoCotizacion, { variant: "default" | "secondary" | "outline" | "destructive"; clase?: string }> = {
-  borrador: { variant: "outline" },
-  enviada: { variant: "secondary" },
-  aceptada: { variant: "default", clase: "bg-[var(--chart-2)] hover:bg-[var(--chart-2)]" },
-  rechazada: { variant: "destructive" },
-  vencida: { variant: "outline", clase: "border-[var(--chart-3)] text-[var(--chart-3)]" },
-  convertida: { variant: "default" },
+// Color por estado, al estilo de LIPgo: fondo 50, texto 700, borde 200. Se
+// lee de un vistazo cual necesita atencion, que es lo que las variantes
+// genericas de shadcn no dan (pintan casi todo del mismo gris).
+const BADGE: Record<EstadoCotizacion, string> = {
+  borrador: "bg-slate-50 text-slate-700 border-slate-200",
+  enviada: "bg-blue-50 text-blue-700 border-blue-200",
+  aceptada: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rechazada: "bg-red-50 text-red-700 border-red-200",
+  vencida: "bg-amber-50 text-amber-700 border-amber-200",
+  convertida: "bg-violet-50 text-violet-700 border-violet-200",
 }
 
 interface Props {
@@ -129,11 +132,14 @@ export function CotizacionesPanel({ onNavigate }: Props) {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Cotizaciones</h1>
-          <p className="text-sm text-muted-foreground">
-            {cotizaciones.length} emitida{cotizaciones.length === 1 ? "" : "s"}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <FileText className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Cotizaciones</h1>
+            <p className="text-sm text-muted-foreground">{cotizaciones.length} emitida{cotizaciones.length === 1 ? "" : "s"}</p>
+          </div>
         </div>
 
         <Dialog open={dialogAbierto} onOpenChange={setDialogAbierto}>
@@ -197,12 +203,12 @@ export function CotizacionesPanel({ onNavigate }: Props) {
         <Card>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Número</TableHead>
-                <TableHead>Para</TableHead>
-                <TableHead>Vigencia</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Estado</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Número</TableHead>
+                <TableHead className="text-xs font-semibold">Para</TableHead>
+                <TableHead className="text-xs font-semibold">Vigencia</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                <TableHead className="text-xs font-semibold">Estado</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -239,7 +245,7 @@ function FilaCotizacion({
   const vigente = diasRestantes >= 0
   const porVencer = vigente && diasRestantes <= 3
   const convertible = c.estado === "aceptada" && vigente && !c.crm_pedido_id
-  const badge = BADGE[c.estado]
+  const tono = BADGE[c.estado]
 
   return (
     <TableRow>
@@ -273,7 +279,7 @@ function FilaCotizacion({
       <TableCell className="text-right font-medium tabular-nums">{money(c.total)}</TableCell>
 
       <TableCell>
-        <Badge variant={badge.variant} className={badge.clase}>
+        <Badge variant="outline" className={`font-medium ${tono}`}>
           {ESTADO_COTIZACION_LABEL[c.estado]}
         </Badge>
       </TableCell>

@@ -182,11 +182,14 @@ export function RutasPanel() {
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Rutas óptimas</h1>
-          <p className="text-sm text-muted-foreground">
-            Ordena las visitas del día para acortar el recorrido
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Route className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Rutas óptimas</h1>
+            <p className="text-sm text-muted-foreground">Ordena las visitas del día para acortar el recorrido</p>
+          </div>
         </div>
 
         <Button variant="ghost" size="sm" onClick={cargar} disabled={cargando}>

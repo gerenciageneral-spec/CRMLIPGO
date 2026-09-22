@@ -31,11 +31,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
 
-const BADGE: Record<EstadoComision, "default" | "secondary" | "outline" | "destructive"> = {
-  pendiente: "outline",
-  aprobada: "secondary",
-  pagada: "default",
-  anulada: "destructive",
+// Color por estado, al estilo de LIPgo.
+const BADGE: Record<EstadoComision, string> = {
+  pendiente: "bg-amber-50 text-amber-700 border-amber-200",
+  aprobada: "bg-blue-50 text-blue-700 border-blue-200",
+  pagada: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  anulada: "bg-slate-50 text-slate-500 border-slate-200",
 }
 
 export function ComisionesPanel() {
@@ -123,11 +124,14 @@ export function ComisionesPanel() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Comisiones</h1>
-          <p className="text-sm text-muted-foreground">
-            Se causan {MOMENTO_COMISION_LABEL[momento].toLowerCase()}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Percent className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Comisiones</h1>
+            <p className="text-sm text-muted-foreground">Se causan {MOMENTO_COMISION_LABEL[momento].toLowerCase()}</p>
+          </div>
         </div>
 
         <Select value={periodo} onValueChange={setPeriodo}>
@@ -196,12 +200,12 @@ export function ComisionesPanel() {
         <Card>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Vendedor</TableHead>
-                <TableHead className="text-right">Base</TableHead>
-                <TableHead className="text-center">%</TableHead>
-                <TableHead className="text-right">Comisión</TableHead>
-                <TableHead>Estado</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Vendedor</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Base</TableHead>
+                <TableHead className="text-xs font-semibold text-center">%</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Comisión</TableHead>
+                <TableHead className="text-xs font-semibold">Estado</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -218,7 +222,7 @@ export function ComisionesPanel() {
                     {money(c.valor)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={BADGE[c.estado]}>{ESTADO_COMISION_LABEL[c.estado]}</Badge>
+                    <Badge variant="outline" className={`font-medium ${BADGE[c.estado]}`}>{ESTADO_COMISION_LABEL[c.estado]}</Badge>
                   </TableCell>
                   <TableCell>
                     {ocupado === c.id ? (

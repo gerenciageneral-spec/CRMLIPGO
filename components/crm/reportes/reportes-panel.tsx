@@ -9,8 +9,7 @@
 import { useState } from "react"
 import {
   Loader2, Download, FileSpreadsheet, Users, FileText, ShoppingCart,
-  Wallet, Percent, UserPlus,
-} from "lucide-react"
+  Wallet, Percent, UserPlus, BarChart3 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getProspectos } from "@/lib/crm-prospectos-actions"
 import { getCotizaciones } from "@/lib/crm-cotizaciones-actions"
@@ -223,10 +222,15 @@ export function ReportesPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Reportes</h1>
-        <p className="text-sm text-muted-foreground">
-          Descarga la información del CRM en Excel
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <BarChart3 className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Reportes</h1>
+            <p className="text-sm text-muted-foreground">Descarga la información del CRM en Excel</p>
+          </div>
+        </div>
       </header>
 
       <Card>

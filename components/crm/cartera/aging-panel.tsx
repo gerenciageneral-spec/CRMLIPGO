@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, LabelList,
 } from "recharts"
-import { Loader2, Wallet, AlertTriangle, TrendingDown, Users } from "lucide-react"
+import { Loader2, Wallet, AlertTriangle, TrendingDown, Users, TrendingUp } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getAging } from "@/lib/crm-cartera-actions"
 import { money, type CuentaConAging, type ResumenAging } from "@/lib/crm-cartera"
@@ -98,10 +98,15 @@ export function AgingPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Antigüedad de cartera</h1>
-        <p className="text-sm text-muted-foreground">
-          Los tramos se configuran en Parametrización
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <TrendingUp className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Antigüedad de cartera</h1>
+            <p className="text-sm text-muted-foreground">Los tramos se configuran en Parametrización</p>
+          </div>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -182,11 +187,11 @@ export function AgingPanel() {
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-center">Facturas</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Vencido</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                  <TableHead className="text-xs font-semibold text-center">Facturas</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Vencido</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -216,12 +221,12 @@ export function AgingPanel() {
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Factura</TableHead>
-                  <TableHead>Vence</TableHead>
-                  <TableHead>Antigüedad</TableHead>
-                  <TableHead className="text-right">Saldo</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                  <TableHead className="text-xs font-semibold">Factura</TableHead>
+                  <TableHead className="text-xs font-semibold">Vence</TableHead>
+                  <TableHead className="text-xs font-semibold">Antigüedad</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Saldo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

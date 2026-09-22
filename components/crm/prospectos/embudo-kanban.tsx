@@ -12,7 +12,7 @@
 // puede hacer con teclado).
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, GripVertical, TrendingUp, Users, Target } from "lucide-react"
+import { Loader2, GripVertical, TrendingUp, Users, Target, Filter } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getProspectos, getEtapas, moverEtapa, getResumenEmbudo } from "@/lib/crm-prospectos-actions"
 import type { Etapa, ProspectoConEtapa, ResumenEmbudo } from "@/lib/crm-prospectos"
@@ -100,10 +100,15 @@ export function EmbudoKanban() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Embudo de ventas</h1>
-        <p className="text-sm text-muted-foreground">
-          Arrastra una tarjeta para moverla de etapa, o usa el selector de cada una.
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Filter className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Embudo de ventas</h1>
+            <p className="text-sm text-muted-foreground">Arrastra una tarjeta para moverla de etapa, o usa el selector de cada una.</p>
+          </div>
+        </div>
       </header>
 
       {resumen && (

@@ -63,11 +63,16 @@ export function ProductosPanel() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Productos</h1>
-        <p className="text-sm text-muted-foreground">
-          Fotos, descripción comercial y precio base. Los datos de producción
-          (peso, estiba, vida útil) se administran en el sistema operativo.
-        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Package className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Productos</h1>
+            <p className="text-sm text-muted-foreground">Fotos, descripción comercial y precio base. Los datos de producción
+          (peso, estiba, vida útil) se administran en el sistema operativo.</p>
+          </div>
+        </div>
       </header>
 
       {/* Lo que falta por completar, que es lo accionable. Un contador de

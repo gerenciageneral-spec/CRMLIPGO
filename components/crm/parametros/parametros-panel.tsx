@@ -11,7 +11,7 @@
 // "parametrizable" y "configurable solo por el que tenga el codigo".
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, Save, RotateCcw, Info, AlertTriangle } from "lucide-react"
+import { Loader2, Save, RotateCcw, Info, AlertTriangle, Settings } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { listarParametros, setParam } from "@/lib/crm-parametros-actions"
 import { GRUPOS_PARAMETROS, type CrmParametro, type ParamKey } from "@/lib/crm-parametros"
@@ -126,13 +126,18 @@ export function ParametrosPanel() {
     <TooltipProvider delayDuration={200}>
       <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Parametrización</h1>
-          <p className="text-sm text-muted-foreground">
-            Los valores de los que dependen las reglas del sistema. Cambiar uno afecta
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+            <Settings className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="text-lg font-semibold leading-tight">Parametrización</h1>
+            <p className="text-sm text-muted-foreground">Los valores de los que dependen las reglas del sistema. Cambiar uno afecta
             solo a lo que ocurra de aquí en adelante: los documentos ya emitidos conservan
-            el valor con el que se hicieron.
-          </p>
-        </header>
+            el valor con el que se hicieron.</p>
+          </div>
+        </div>
+      </header>
 
         {[...porGrupo.entries()].map(([grupo, items]) => (
           <Card key={grupo}>
