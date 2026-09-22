@@ -294,14 +294,18 @@ export function Sidebar({
 
   // REORG visual (estilo Odoo): color de dominio por grupo para los íconos.
   // Color de dominio por grupo, para el icono y el heroe de la cabecera.
+  //
+  // Son los MISMOS que usan las tarjetas de Inicio (components/module-cards),
+  // aclarados para que se lean sobre el fondo oscuro del menu: que cartera sea
+  // verde aqui y alla es lo que permite reconocer el area sin leer su nombre.
   const GROUP_TINT: Record<string, string> = {
-    inicio: "#9fb6cc",
-    prospectos: "#b199ee",
-    ventas: "#8ea6f0",
-    clientes: "#5fc8e6",
-    cartera: "#5fd398",
-    inteligencia: "#e0b45c",
-    configuracion: "#9aa6b3",
+    inicio: "#3b9eff",        // azul
+    prospectos: "#a855f7",    // violeta
+    ventas: "#fb923c",        // naranja
+    clientes: "#22d3ee",      // cian
+    cartera: "#34d399",       // verde
+    inteligencia: "#f472b6",  // magenta
+    configuracion: "#94a3b8", // gris
   }
 
   // Color del héroe = tinte del área activa (o cian de marca en Inicio). Alimenta

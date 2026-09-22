@@ -13,6 +13,18 @@ import { Button } from "@/components/ui/button"
 import { useModulePermissions } from "@/hooks/use-module-permissions"
 import { filterGroupsByPermissions, type GroupKey } from "@/lib/dashboard-data"
 
+/** Color por area. Los mismos de las tarjetas de Inicio: entrar a un area no
+ *  deberia cambiarle el color al usuario a medio camino. */
+const COLOR_AREA: Record<string, { de: string; a: string }> = {
+  inicio: { de: "#2563eb", a: "#0ea5e9" },
+  prospectos: { de: "#7c3aed", a: "#a855f7" },
+  ventas: { de: "#ea580c", a: "#f59e0b" },
+  clientes: { de: "#0891b2", a: "#06b6d4" },
+  cartera: { de: "#059669", a: "#10b981" },
+  inteligencia: { de: "#c026d3", a: "#ec4899" },
+  configuracion: { de: "#475569", a: "#64748b" },
+}
+
 interface ModulesViewProps {
   selectedGroup: GroupKey
   onSelectModule: (moduleName: string) => void
@@ -42,6 +54,7 @@ export function ModulesView({ selectedGroup, onSelectModule, onBack }: ModulesVi
   }
 
   const IconoGrupo = grupo.icon
+  const color = COLOR_AREA[selectedGroup] ?? COLOR_AREA.configuracion
 
   // Se aplana la estructura para pintar: los subgrupos se muestran como
   // encabezados dentro de la misma rejilla.
@@ -57,7 +70,12 @@ export function ModulesView({ selectedGroup, onSelectModule, onBack }: ModulesVi
             <ChevronLeft className="h-5 w-5" />
           </Button>
         )}
-        <IconoGrupo className="h-6 w-6 text-[var(--chart-1)]" aria-hidden="true" />
+        <span
+          className="rounded-xl p-2.5 text-white shadow-sm"
+          style={{ background: `linear-gradient(140deg, ${color.de}, ${color.a})` }}
+        >
+          <IconoGrupo className="h-5 w-5" aria-hidden="true" />
+        </span>
         <h2 className="text-xl font-semibold tracking-tight">{grupo.title}</h2>
       </div>
 
@@ -74,9 +92,27 @@ export function ModulesView({ selectedGroup, onSelectModule, onBack }: ModulesVi
                 <button
                   key={modulo.name}
                   onClick={() => onSelectModule(modulo.name)}
-                  className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2"
+                  style={
+                    {
+                      "--de": color.de,
+                      "--a": color.a,
+                      boxShadow: "none",
+                    } as React.CSSProperties
+                  }
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = `0 12px 26px color-mix(in srgb, ${color.de} 22%, transparent)`
+                    e.currentTarget.style.borderColor = `color-mix(in srgb, ${color.de} 40%, transparent)`
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = "none"
+                    e.currentTarget.style.borderColor = ""
+                  }}
                 >
-                  <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+                  <span
+                    className="rounded-lg p-2 text-white transition-transform duration-200 group-hover:scale-105"
+                    style={{ background: `linear-gradient(140deg, ${color.de}, ${color.a})` }}
+                  >
                     <Icono className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <span className="text-sm font-medium leading-tight">
