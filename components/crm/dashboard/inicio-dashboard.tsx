@@ -142,9 +142,17 @@ export function InicioDashboard({ onSelectGroup, onSelectModule }: Props) {
         </div>
       )}
 
-      {/* Escalonado: las cuatro tarjetas entran una tras otra, lo que guia la
-          mirada de izquierda a derecha en vez de soltarlas de golpe. */}
-      <ListaEscalonada className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Rejilla que se reparte sola, como la del tablero de LIPgo, en vez de
+          cuatro columnas fijas. Con columnas fijas cada tarjeta se estiraba
+          hasta un cuarto de la pantalla y quedaba un hueco enorme a la derecha
+          del contenido; con `auto-fit` la tarjeta manda y caben las que quepan.
+
+          Escalonado: entran una tras otra, lo que guia la mirada de izquierda
+          a derecha en vez de soltarlas de golpe. */}
+      <ListaEscalonada
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}
+      >
         <ElementoLista>
         <KpiCard
           icon={TrendingUp}

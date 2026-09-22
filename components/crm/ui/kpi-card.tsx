@@ -170,8 +170,19 @@ export function KpiCard({
           {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
         </div>
 
-        <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
-        {trendHint && <p className="mt-0.5 text-[11px] text-muted-foreground">{trendHint}</p>}
+        {/* Etiqueta y pie, con las medidas de LIPgo. Estaban en `text-sm`, que
+            en una tarjeta estrecha empuja el texto a dos lineas y descuadra la
+            fila entera cuando solo una de las tarjetas se parte. */}
+        <div className="mt-1">
+          <p className="text-[11px] font-semibold leading-tight text-foreground/80 md:text-xs">
+            {label}
+          </p>
+          {trendHint && (
+            <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+              {trendHint}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )

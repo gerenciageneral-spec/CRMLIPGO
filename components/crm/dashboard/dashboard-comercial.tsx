@@ -133,7 +133,13 @@ export function DashboardComercialPanel({ onNavigate }: Props) {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Rejilla que se reparte sola, como la del tablero de LIPgo: con
+          columnas fijas cada tarjeta se estira hasta un cuarto de pantalla y
+          deja un hueco enorme a la derecha del contenido. */}
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}
+      >
         <KpiCard
           icon={TrendingUp}
           label="Ventas del mes"

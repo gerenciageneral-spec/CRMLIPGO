@@ -17,7 +17,7 @@
 // activado ve el contenido colocado, sin desplazamiento. No es un extra de
 // accesibilidad: hay gente a la que este tipo de movimiento le produce mareo.
 
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
@@ -76,10 +76,13 @@ export function ListaEscalonada({
   children,
   escalon = 0.04,
   className,
+  style,
 }: {
   children: ReactNode
   escalon?: number
   className?: string
+  /** Para rejillas que se definen con `gridTemplateColumns` y no con clases. */
+  style?: CSSProperties
 }) {
   const quieto = useReducedMotion()
 
@@ -91,6 +94,7 @@ export function ListaEscalonada({
         visible: { transition: { staggerChildren: quieto ? 0 : escalon } },
       }}
       className={className}
+      style={style}
     >
       {children}
     </motion.div>
