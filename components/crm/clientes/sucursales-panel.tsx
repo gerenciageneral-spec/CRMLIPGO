@@ -1,0 +1,205 @@
+"use client"
+
+// Sucursales: los puntos de entrega de cada cliente.
+//
+// Son la tabla `bodegas` del sistema operativo, que el CRM lee para saber a
+// dónde se despacha y para planificar rutas. Aquí solo se edita el GPS: el
+// resto lo administra operación, que es quien despacha.
+
+import { useEffect, useMemo, useState } from "react"
+import { Loader2, Search, Store, MapPin, Building2, ChevronRight } from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
+import { getSucursalesCrm, getClientesCrm } from "@/lib/crm-catalogos-actions"
+import type { SucursalCrm, ClienteCrm } from "@/lib/crm-catalogos"
+import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { toast } from "@/hooks/use-toast"
+
+interface GrupoCliente {
+  clienteId: number | null
+  nombre: string
+  sucursales: SucursalCrm[]
+  conGps: number
+}
+
+export function SucursalesPanel() {
+  const { selectedEmpresaId } = useAuth()
+  const empresaId = selectedEmpresaId ?? 1
+
+  const [sucursales, setSucursales] = useState<SucursalCrm[]>([])
+  const [clientes, setClientes] = useState<ClienteCrm[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [busqueda, setBusqueda] = useState("")
+
+  useEffect(() => {
+    let cancelado = false
+
+    Promise.all([getSucursalesCrm(empresaId), getClientesCrm(empresaId)]).then(([sRes, cRes]) => {
+      if (cancelado) return
+      if (sRes.success) setSucursales(sRes.data ?? [])
+      else toast({ title: "No se pudieron cargar", description: sRes.error, variant: "destructive" })
+      if (cRes.success) setClientes(cRes.data ?? [])
+      setCargando(false)
+    })
+
+    return () => { cancelado = true }
+  }, [empresaId])
+
+  const nombreCliente = useMemo(
+    () => new Map(clientes.map((c) => [c.id, c.nombre])),
+    [clientes],
+  )
+
+  // Se agrupan por cliente: una sucursal suelta no dice nada, lo que importa
+  // es a cuántos puntos hay que llegar por cada cliente.
+  const grupos = useMemo(() => {
+    const t = busqueda.trim().toLowerCase()
+    const mapa = new Map<number | null, GrupoCliente>()
+
+    for (const s of sucursales) {
+      if (!s.activo) continue
+
+      const nombre = s.clienteid ? nombreCliente.get(s.clienteid) ?? s.cliente ?? "—" : s.cliente ?? "Sin cliente"
+
+      if (t && ![nombre, s.nombrebodega, s.ciudad, s.direccion].some((x) => x?.toLowerCase().includes(t))) {
+        continue
+      }
+
+      const g = mapa.get(s.clienteid) ?? {
+        clienteId: s.clienteid,
+        nombre,
+        sucursales: [],
+        conGps: 0,
+      }
+      g.sucursales.push(s)
+      if (s.latitud != null) g.conGps += 1
+      mapa.set(s.clienteid, g)
+    }
+
+    return [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [sucursales, nombreCliente, busqueda])
+
+  const totales = useMemo(() => {
+    const activas = sucursales.filter((s) => s.activo)
+    return {
+      total: activas.length,
+      conGps: activas.filter((s) => s.latitud != null).length,
+      ciudades: new Set(activas.map((s) => s.ciudad).filter(Boolean)).size,
+    }
+  }, [sucursales])
+
+  return (
+    <div className="space-y-5">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Sucursales</h1>
+        <p className="text-sm text-muted-foreground">
+          Los puntos de entrega de cada cliente. Las administra el sistema
+          operativo; aquí se consultan para cotizar y planificar rutas.
+        </p>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <KpiCard icon={Store} label="Sucursales activas" value={totales.total} accent="info" />
+        <KpiCard
+          icon={MapPin}
+          label="Con ubicación GPS"
+          value={totales.conGps}
+          accent={totales.conGps < totales.total ? "warning" : "success"}
+          trendHint={
+            totales.conGps < totales.total
+              ? `Faltan ${totales.total - totales.conGps} para rutas`
+              : "Todas ubicadas"
+          }
+        />
+        <KpiCard icon={Building2} label="Ciudades" value={totales.ciudades} accent="primary" />
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por cliente, sucursal o ciudad…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {cargando ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : grupos.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <Store className="h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              {busqueda ? "Nada coincide con la búsqueda." : "No hay sucursales registradas."}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {grupos.map((g) => (
+            <Card key={g.clienteId ?? "sin-cliente"}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">{g.nombre}</p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {g.sucursales.length} punto{g.sucursales.length === 1 ? "" : "s"}
+                    </Badge>
+                    {g.conGps < g.sucursales.length && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {g.sucursales.length - g.conGps} sin GPS
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {g.sucursales.map((s) => (
+                    <div key={s.idbodega} className="flex items-start gap-2 rounded-lg border p-2.5">
+                      <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{s.nombrebodega}</p>
+
+                        {s.direccion && (
+                          <p className="truncate text-xs text-muted-foreground">{s.direccion}</p>
+                        )}
+
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {s.ciudad && <span>{s.ciudad}</span>}
+                          {s.departamento && <span>· {s.departamento}</span>}
+                        </p>
+                      </div>
+
+                      {s.latitud != null ? (
+                        <MapPin
+                          className="h-4 w-4 shrink-0 text-[var(--chart-2)]"
+                          aria-label="Con ubicación"
+                        />
+                      ) : (
+                        <MapPin
+                          className="h-4 w-4 shrink-0 text-muted-foreground/30"
+                          aria-label="Sin ubicación"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default SucursalesPanel
