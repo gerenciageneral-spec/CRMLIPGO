@@ -5,7 +5,7 @@ import { Sparkles, Mic, Lightbulb, ArrowUp, Square, Maximize2, Bot, X } from "lu
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { useAuth } from "@/components/auth-provider"
-import { sugerenciasDe } from "@/lib/kpis-area"
+import { sugerenciasDe } from "@/lib/crm-sugerencias"
 
 export interface AtencionItem {
   label: string
@@ -524,7 +524,7 @@ export function LipAiAssistant({ contextLabel, empresaLabel, onOpen, alertas, on
         {/* Sugerencias contextuales del módulo (solo antes de la primera pregunta) */}
         {messages.length === 0 && (
           <div className="lipai-sugs relative z-[2] mt-3 flex flex-wrap gap-2">
-            {sugs.map((s) => (
+            {sugs.map((s: string) => (
               <button
                 key={s}
                 onClick={() => enviar(s)}

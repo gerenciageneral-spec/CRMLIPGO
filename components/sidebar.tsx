@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import type { GroupKey, Module, Subgroup } from "@/lib/dashboard-data"
-import { groups } from "@/lib/dashboard-data"
+import { groups, GRUPOS_SIN_FILTRO_PROTEGIDO } from "@/lib/dashboard-data"
 import { useState, useEffect, useMemo, type CSSProperties } from "react"
 
 interface SidebarProps {
@@ -38,47 +38,24 @@ interface UserModulesResponse {
   allowedModules: string[]
 }
 
+
 /**
- * Actor del héroe ADAPTATIVO: el glifo animado cambia según el módulo/área
- * seleccionada, para que la "Torre de Control" hable el idioma del dominio
- * (Gestión Humana → personas, Finanzas → dinero, Despachos → camión…). El color
- * lo hereda por CSS (`var(--hero)`) desde el contenedor del héroe. Sin grupo
- * (Inicio) muestra el camión de marca. Solo presentación: no toca lógica.
+ * Glifo del heroe segun el grupo activo, para que la cabecera del menu hable
+ * el idioma de la seccion. Solo presentacion: el color lo hereda por CSS
+ * (var(--hero)) desde el contenedor. Sin grupo (Inicio) muestra el glifo de
+ * marca.
  */
 function HeroActor({ groupKey }: { groupKey: GroupKey | null }) {
   switch (groupKey) {
-    case "rrhh": // Gestión Humana → persona
+    case "prospectos": // persona con senal de contacto
       return (
         <>
-          <circle cx="11" cy="3.6" r="2.7" className="hero-light" />
-          <path d="M11 6.6 c-3 0-5 2-5 5 v3 h10 v-3 c0-3-2-5-5-5 z" className="hero-light" />
-          <path d="M9 8.4 l2 2 2-2" className="hero-accent-stroke" fill="none" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="11" cy="4" r="2.7" className="hero-light" />
+          <path d="M11 7 c-3 0-5 2-5 5 v3 h10 v-3 c0-3-2-5-5-5 z" className="hero-light" />
+          <circle cx="16.5" cy="4.5" r="1.8" className="hero-accent" />
         </>
       )
-    case "financiera": // Financiera → moneda $
-      return (
-        <>
-          <circle cx="12" cy="9" r="7" className="hero-light" />
-          <circle cx="12" cy="9" r="7" fill="none" className="hero-accent-stroke" strokeWidth="1.3" />
-          <text x="12" y="12.4" textAnchor="middle" fontSize="9" fontWeight="800" fontFamily="ui-sans-serif,system-ui,sans-serif" className="hero-accent">$</text>
-        </>
-      )
-    case "compensacion": // Compensación → billetera (nómina/liquidaciones/pago)
-      return (
-        <>
-          <rect x="4" y="5.5" width="14" height="10" rx="2" className="hero-light" />
-          <path d="M4 8.6 h14" className="hero-lightstroke" strokeWidth="1.1" />
-          <circle cx="14.6" cy="11.4" r="1.5" className="hero-accent" />
-        </>
-      )
-    case "inventarios": // Inventarios → caja isométrica
-      return (
-        <>
-          <path d="M12 3 l7.5 3.7 v6.6 l-7.5 3.7 -7.5-3.7 v-6.6 z" className="hero-light" />
-          <path d="M4.5 6.7 l7.5 3.7 7.5-3.7 M12 10.4 v8" fill="none" className="hero-accent-stroke" strokeWidth="1.1" strokeLinejoin="round" />
-        </>
-      )
-    case "pedidos": // Pedidos → carrito
+    case "ventas": // carrito
       return (
         <g fill="none" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 4 h2.6 l2 8 h8.6 l2-6 h-11.8" className="hero-lightstroke" strokeWidth="1.6" />
@@ -86,25 +63,31 @@ function HeroActor({ groupKey }: { groupKey: GroupKey | null }) {
           <circle cx="15.6" cy="14.6" r="1.5" className="hero-accent" fill="currentColor" />
         </g>
       )
-    case "mrp": // MRP / Planeación → engranaje
-    case "produccion": // Producción → engranaje girando
+    case "clientes": // dos personas
       return (
-        <g className="lipgo-gear">
-          <g className="hero-lightstroke" strokeWidth="2.3" strokeLinecap="round">
-            <line x1="11" y1="2.4" x2="11" y2="4.6" />
-            <line x1="11" y1="13.4" x2="11" y2="15.6" />
-            <line x1="4.4" y1="9" x2="6.6" y2="9" />
-            <line x1="15.4" y1="9" x2="17.6" y2="9" />
-            <line x1="6.3" y1="4.3" x2="7.9" y2="5.9" />
-            <line x1="14.1" y1="12.1" x2="15.7" y2="13.7" />
-            <line x1="15.7" y1="4.3" x2="14.1" y2="5.9" />
-            <line x1="7.9" y1="12.1" x2="6.3" y2="13.7" />
-          </g>
-          <circle cx="11" cy="9" r="4.1" className="hero-light" />
-          <circle cx="11" cy="9" r="1.9" fill="#0b2138" className="hero-accent-stroke" strokeWidth="1.2" />
-        </g>
+        <>
+          <circle cx="8" cy="5" r="2.4" className="hero-light" />
+          <path d="M8 7.8 c-2.6 0-4.4 1.8-4.4 4.4 v2.6 h8.8 v-2.6 c0-2.6-1.8-4.4-4.4-4.4 z" className="hero-light" />
+          <circle cx="15" cy="6.2" r="2" className="hero-accent" />
+          <path d="M15 8.6 c-2.1 0-3.6 1.5-3.6 3.6 v2.6 h7.2 v-2.6 c0-2.1-1.5-3.6-3.6-3.6 z" className="hero-accent" />
+        </>
       )
-    case "configuracion": // Configuración → controles / sliders
+    case "cartera": // billetera con moneda
+      return (
+        <>
+          <rect x="4" y="5.5" width="14" height="10" rx="2" className="hero-light" />
+          <path d="M4 8.6 h14" className="hero-lightstroke" strokeWidth="1.1" />
+          <circle cx="14.6" cy="11.4" r="1.5" className="hero-accent" />
+        </>
+      )
+    case "inteligencia": // chispa
+      return (
+        <>
+          <path d="M11 2 l1.9 5.1 5.1 1.9 -5.1 1.9 -1.9 5.1 -1.9-5.1 -5.1-1.9 5.1-1.9 z" className="hero-light" />
+          <circle cx="11" cy="9" r="1.6" className="hero-accent" />
+        </>
+      )
+    case "configuracion": // controles
       return (
         <g strokeLinecap="round">
           <line x1="4" y1="5" x2="18" y2="5" className="hero-lightstroke" strokeWidth="1.5" />
@@ -115,45 +98,12 @@ function HeroActor({ groupKey }: { groupKey: GroupKey | null }) {
           <circle cx="7" cy="13" r="2" className="hero-accent" />
         </g>
       )
-    case "certificaciones_lip": // Certificaciones → escudo con check
+    case "inicio":
+    default: // grafico ascendente: la marca del CRM
       return (
         <>
-          <path d="M11 2.4 l6 2.1 v4 c0 4-3 6.6-6 8.1 c-3-1.5-6-4.1-6-8.1 v-4 z" className="hero-light" />
-          <path d="M8 8.9 l2.2 2.2 4-4.3" fill="none" className="hero-accent-stroke" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </>
-      )
-    case "sst": // SST → casco de seguridad
-      return (
-        <>
-          <path d="M4.5 13.5 h13 v1.8 h-13 z" className="hero-light" />
-          <path d="M6 13.5 c0-4.4 2.4-6.7 5-6.7 s5 2.3 5 6.7 z" className="hero-light" />
-          <rect x="10.2" y="4.6" width="1.6" height="3" rx="0.6" className="hero-accent" />
-          <path d="M8 11 h6" className="hero-accent-stroke" strokeWidth="1.2" strokeLinecap="round" />
-        </>
-      )
-    case "lip": // LIP → energía / rayo
-      return (
-        <>
-          <path d="M13 2 L6 10 h4 l-2 6 8-9 h-4 z" className="hero-accent" />
-          <path d="M13 2 L6 10 h4 l-2 6 8-9 h-4 z" fill="none" className="hero-lightstroke" strokeWidth="0.8" strokeLinejoin="round" />
-        </>
-      )
-    case "integral": // Gestión Integral → barras / indicadores
-      return (
-        <>
-          <rect x="4" y="9" width="3.2" height="6" rx="0.6" className="hero-light" />
-          <rect x="9.4" y="6" width="3.2" height="9" rx="0.6" className="hero-light" />
-          <rect x="14.8" y="3" width="3.2" height="12" rx="0.6" className="hero-accent" />
-        </>
-      )
-    case "despachos": // Despachos → camión (motivo de marca)
-    default: // Inicio / sin grupo → camión logístico
-      return (
-        <>
-          <rect x="6" y="4" width="13" height="9" rx="1.5" className="hero-light" />
-          <path d="M19 7h5l3 3v3h-8z" className="hero-accent" />
-          <circle cx="10.5" cy="14.3" r="1.7" fill="#0b2138" className="hero-lightstroke" strokeWidth="1" />
-          <circle cx="23" cy="14.3" r="1.7" fill="#0b2138" className="hero-lightstroke" strokeWidth="1" />
+          <path d="M4 14 l4-4 3 3 5-6" fill="none" className="hero-lightstroke" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="16" cy="7" r="2" className="hero-accent" />
         </>
       )
   }
@@ -292,13 +242,13 @@ export function Sidebar({
         // modulo protegido permitido viva en el grupo. Mientras los
         // permisos aun no terminan de cargar, no aplicamos este filtro
         // (`permissionsLoaded` false) para evitar parpadeos.
-        // Grupos exentos del filtro de modulo protegido: contienen solo
-        // modulos no protegidos que deben verse para todos (Fase 1).
-        // "aprendizaje" es la guia de usuario: su unico modulo no esta
-        // protegido a proposito (debe verlo todo el mundo), asi que sin esta
-        // exencion el filtro de "al menos un modulo protegido permitido"
-        // ocultaria el grupo entero para todos.
-        const GRUPOS_SIN_FILTRO_PROTEGIDO: GroupKey[] = ["certificaciones_lip", "aprendizaje"]
+        // Grupos exentos del filtro de "al menos un modulo protegido
+        // permitido". En el CRM no hay ninguno: todos los modulos estan
+        // protegidos por permiso.
+        //
+        // La lista se importa de dashboard-data.ts en vez de repetirse aqui.
+        // Antes estaba duplicada en los dos archivos y agregar un grupo exigia
+        // acordarse de tocar ambos, que es la clase de detalle que se olvida.
         if (permissionsLoaded && !GRUPOS_SIN_FILTRO_PROTEGIDO.includes(group.key)) {
           const allModulesInGroup = [
             ...(filteredModules ?? []),

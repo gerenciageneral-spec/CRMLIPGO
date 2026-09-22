@@ -1,221 +1,95 @@
 "use client"
 
-import { useEffect, useState, type CSSProperties } from "react"
-import { filterGroupsByPermissions, type GroupKey, type Module } from "@/lib/dashboard-data"
+// Rejilla de modulos de un grupo. Es lo que se ve tras elegir un grupo del
+// menu y antes de entrar a un modulo concreto.
+//
+// Solo muestra lo que el usuario puede abrir: filterGroupsByPermissions aplica
+// el mismo criterio que el sidebar, para que no aparezca una tarjeta que al
+// pulsarla no pinte nada.
+
+import { useMemo } from "react"
+import { ChevronLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { useModulePermissions } from "@/hooks/use-module-permissions"
-import { ArrowLeft, ArrowRight } from "lucide-react"
-import { TINT } from "@/components/module-cards"
-import { AreaKpis, type ValorBsc } from "@/components/area-kpis"
-import { PedidosKpiStrip } from "@/components/orders/pedidos-kpi-strip"
-import { DespachoKpiStrip } from "@/components/orders/despacho-kpi-strip"
-import { VehiculosNoProcesadosCard } from "@/components/vehiculos-no-procesados-card"
-import { useAuth } from "@/components/auth-provider"
-import { getIndicadoresValores } from "@/lib/sig-actions"
-import { AREA_KPIS } from "@/lib/kpis-area"
+import { filterGroupsByPermissions, type GroupKey } from "@/lib/dashboard-data"
 
 interface ModulesViewProps {
-  groupKey: GroupKey
-  onBack: () => void
+  selectedGroup: GroupKey
   onSelectModule: (moduleName: string) => void
-  /** Navegación robusta (grupo + módulo) para el asistente IA. */
-  onNavigate?: (moduleName: string) => void
-  /** Abrir un módulo principal (grupo) para el asistente IA. */
-  onOpenGroup?: (key: string) => void
+  onBack?: () => void
 }
 
-const TEAL = "#00b4cc"
+export function ModulesView({ selectedGroup, onSelectModule, onBack }: ModulesViewProps) {
+  const { allowedModules, loaded, isModuleVisible } = useModulePermissions()
 
-function monthRange() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-${day}` }
-}
+  const grupo = useMemo(() => {
+    const visibles = filterGroupsByPermissions(isModuleVisible, loaded, new Set(allowedModules))
+    return visibles.find((g) => g.key === selectedGroup)
+  }, [selectedGroup, isModuleVisible, loaded, allowedModules])
 
+  if (!grupo) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <p className="text-muted-foreground">No tienes acceso a los módulos de esta sección.</p>
+        {onBack && (
+          <Button variant="outline" size="sm" onClick={onBack}>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Volver
+          </Button>
+        )}
+      </div>
+    )
+  }
 
-// Tarjeta de submódulo VIVA: mismo lenguaje que el launcher de Inicio. Toma el
-// color de dominio del grupo (`--tint`) y, en hover, florece — glow del color,
-// leve lift, el tile del ícono se enciende a degradado y aparece una flecha de
-// "abrir". Coherente, distintiva y con affordance clara de que es clickeable.
-function ModuleCard({
-  module,
-  onSelect,
-  tint,
-}: {
-  module: Module
-  onSelect: (name: string) => void
-  tint: string
-}) {
-  const Icon = module.icon
-  return (
-    <button
-      onClick={() => onSelect(module.name)}
-      className="mod-card"
-      style={{ "--tint": tint } as CSSProperties}
-    >
-      <span className="mod-ico">
-        <Icon className="h-[17px] w-[17px]" />
-      </span>
-      <span className="mod-name">{module.label ?? module.name}</span>
-      <ArrowRight className="mod-arrow h-4 w-4" />
-    </button>
-  )
-}
+  const IconoGrupo = grupo.icon
 
-export function ModulesView({ groupKey, onBack, onSelectModule }: ModulesViewProps) {
-  const { selectedEmpresaId } = useAuth()
-  const [valores, setValores] = useState<Record<string, ValorBsc>>({})
-  const [loading, setLoading] = useState(true)
-
-  // Mismo filtro de permisos que Inicio (module-cards) y el sidebar: si el
-  // usuario no tiene acceso a un submódulo, no debe verlo listado aquí.
-  const { loaded, allowedModules, isModuleVisible } = useModulePermissions()
-  const group = filterGroupsByPermissions(isModuleVisible, loaded, allowedModules).find((g) => g.key === groupKey)
-
-  // UNA sola lectura del BSC por empresa/grupo (+ refresco cada 3 min). Alimenta
-  // los KPIs del área Y las tareas del día del submódulo, así siempre coinciden.
-  useEffect(() => {
-    const keys = AREA_KPIS[groupKey] ?? []
-    // SST y SIG/Certificaciones son TRANSVERSALES a LIP → agregado LIP (scope null),
-    // idéntico en todos los IDs. El resto reacciona a la empresa seleccionada.
-    const transversal = groupKey === "sst" || groupKey === "certificaciones_lip"
-    if (keys.length === 0 || (!selectedEmpresaId && !transversal)) {
-      setValores({})
-      setLoading(false)
-      return
-    }
-    let cancel = false
-    const load = async () => {
-      try {
-        const { desde, hasta } = monthRange()
-        // Mismo alcance que las tiras de submódulo (area-kpis-rapidas): así la
-        // portada y cada submódulo muestran EXACTAMENTE la misma cifra del BSC.
-        const scope = transversal ? null : selectedEmpresaId
-        const r = await getIndicadoresValores(scope, desde, hasta)
-        if (!cancel && r.success) setValores(r.valores as Record<string, ValorBsc>)
-      } catch {
-        // silencioso
-      } finally {
-        if (!cancel) setLoading(false)
-      }
-    }
-    setLoading(true)
-    load()
-    const interval = setInterval(load, 180000)
-    return () => {
-      cancel = true
-      clearInterval(interval)
-    }
-  }, [groupKey, selectedEmpresaId])
-
-  if (!group) return null
-
-  const GroupIcon = group.icon
-  const tint = TINT[groupKey] ?? TEAL
-  // Suma módulos directos + de subgrupos. (Antes daba 0 cuando `modules: []`
-  // existía junto a subgrupos, porque el array vacío se tomaba como válido.)
-  const totalModules =
-    (group.modules?.length ?? 0) + (group.subgroups?.reduce((acc, sg) => acc + sg.modules.length, 0) ?? 0)
+  // Se aplana la estructura para pintar: los subgrupos se muestran como
+  // encabezados dentro de la misma rejilla.
+  const secciones = grupo.subgroups?.length
+    ? grupo.subgroups.map((sg) => ({ titulo: sg.title, modulos: sg.modules }))
+    : [{ titulo: null as string | null, modulos: grupo.modules ?? [] }]
 
   return (
-    <div className="space-y-5" style={{ "--tint": tint } as CSSProperties}>
-      <style>{`
-        .mod-card{ position:relative; display:flex; align-items:center; gap:11px; border-radius:14px;
-          background:var(--card,#fff); border:1px solid #e7edf4; padding:11px 12px; text-align:left; cursor:pointer; overflow:hidden;
-          transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
-        /* Hairline de color que se enciende en hover */
-        .mod-card::before{ content:""; position:absolute; inset:0; border-radius:14px; padding:1.2px; pointer-events:none;
-          background:linear-gradient(135deg, color-mix(in srgb, var(--tint) 68%, transparent), transparent 60%);
-          -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude;
-          opacity:0; transition:opacity .16s; }
-        .mod-card:hover{ transform:translateY(-2px); border-color:transparent;
-          box-shadow:0 12px 26px color-mix(in srgb, var(--tint) 22%, transparent), 0 4px 10px rgba(20,42,68,.05); }
-        .mod-card:hover::before{ opacity:1; }
-        .mod-ico{ position:relative; z-index:1; width:34px; height:34px; flex:none; border-radius:10px;
-          display:flex; align-items:center; justify-content:center;
-          background:color-mix(in srgb, var(--tint) 14%, #fff); color:var(--tint);
-          box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tint) 20%, transparent);
-          transition:transform .16s, background .16s, color .16s, box-shadow .16s; }
-        .mod-card:hover .mod-ico{ transform:scale(1.06); color:#fff;
-          background:linear-gradient(135deg, var(--tint), color-mix(in srgb, var(--tint) 62%, #000));
-          box-shadow:0 6px 14px color-mix(in srgb, var(--tint) 40%, transparent); }
-        .mod-name{ position:relative; z-index:1; flex:1; min-width:0; font-size:13px; font-weight:700;
-          line-height:1.15; color:#132a44; letter-spacing:-.01em; }
-        .mod-arrow{ position:relative; z-index:1; flex:none; color:var(--tint); opacity:0;
-          transform:translateX(-5px); transition:opacity .16s, transform .16s; }
-        .mod-card:hover .mod-arrow{ opacity:1; transform:none; }
-        @media (prefers-reduced-motion:reduce){ .mod-card, .mod-card *{ transition:none !important; } .mod-card:hover{ transform:none } }
-      `}</style>
-      {/* Header compacto */}
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          aria-label="Volver"
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-accent"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <span
-          className="flex h-11 w-11 flex-none items-center justify-center rounded-xl"
-          style={{
-            background: `color-mix(in srgb, ${tint} 15%, #fff)`,
-            color: tint,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${tint} 22%, transparent)`,
-          }}
-        >
-          <GroupIcon className="h-6 w-6" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold leading-tight text-foreground sm:text-2xl">{group.title}</h1>
-          <p className="text-[13px] text-muted-foreground">
-            Selecciona un módulo para continuar · {totalModules} módulo{totalModules !== 1 ? "s" : ""}
-          </p>
-        </div>
+        {onBack && (
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Volver">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        )}
+        <IconoGrupo className="h-6 w-6 text-[var(--chart-1)]" aria-hidden="true" />
+        <h2 className="text-xl font-semibold tracking-tight">{grupo.title}</h2>
       </div>
 
-      {/* KPIs del área. Para Pedidos/Despacho se muestran los KPIs de gestión del
-          cliente alineados a objetivos (vencidos, por vencer, vehículos por cerrar)
-          en vez de solo conteos básicos. El resto de grupos usa el set del BSC. */}
-      {groupKey === "pedidos" ? (
-        <div className="space-y-1">
-          <div className="text-sm font-semibold text-foreground">Cumplimiento de entregas</div>
-          <PedidosKpiStrip />
-        </div>
-      ) : groupKey === "despachos" ? (
-        <div className="space-y-3">
-          <div className="text-sm font-semibold text-foreground">Operación y despacho del día</div>
-          <DespachoKpiStrip />
-          <VehiculosNoProcesadosCard />
-        </div>
-      ) : (
-        // Indicadores del BSC del área (módulo madre), período = mes actual, con
-        // enlaces "ver 3D". Los indicadores por SUBMÓDULO los pinta ModuleKpiHeader
-        // al entrar a cada submódulo (no se duplican aquí en la portada).
-        <AreaKpis groupKey={groupKey} valores={valores} loading={loading} />
-      )}
+      {secciones.map((seccion, i) => (
+        <section key={seccion.titulo ?? i} className="space-y-3">
+          {seccion.titulo && (
+            <h3 className="text-sm font-medium text-muted-foreground">{seccion.titulo}</h3>
+          )}
 
-      {/* Módulos directos */}
-      {group.modules && group.modules.length > 0 && (
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-          {group.modules.map((m) => (
-            <ModuleCard key={m.name} module={m} onSelect={onSelectModule} tint={tint} />
-          ))}
-        </div>
-      )}
-
-      {/* Subgrupos */}
-      {group.subgroups &&
-        group.subgroups.map((sg) => (
-          <div key={sg.title} className="space-y-2.5">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{sg.title}</h2>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-              {sg.modules.map((m) => (
-                <ModuleCard key={m.name} module={m} onSelect={onSelectModule} tint={tint} />
-              ))}
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {seccion.modulos.map((modulo) => {
+              const Icono = modulo.icon
+              return (
+                <button
+                  key={modulo.name}
+                  onClick={() => onSelectModule(modulo.name)}
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="rounded-lg bg-[var(--chart-1)]/10 p-2 text-[var(--chart-1)]">
+                    <Icono className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="text-sm font-medium leading-tight">
+                    {modulo.label ?? modulo.name}
+                  </span>
+                </button>
+              )
+            })}
           </div>
-        ))}
+        </section>
+      ))}
     </div>
   )
 }
+
+export default ModulesView

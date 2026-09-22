@@ -5,7 +5,9 @@ import { ArrowLeft, Construction } from 'lucide-react'
 
 interface ModulePlaceholderProps {
   moduleName: string
-  onBack: () => void
+  /** Opcional: si no se pasa, no se pinta el boton de volver (el sidebar ya
+   *  permite salir del modulo). */
+  onBack?: () => void
 }
 
 export function ModulePlaceholder({ moduleName, onBack }: ModulePlaceholderProps) {
@@ -20,10 +22,12 @@ export function ModulePlaceholder({ moduleName, onBack }: ModulePlaceholderProps
           Este módulo está actualmente en desarrollo. Pronto estará disponible con todas sus funcionalidades.
         </p>
       </div>
-      <Button onClick={onBack} variant="outline" className="mt-4">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver al menú
-      </Button>
+      {onBack && (
+        <Button onClick={onBack} variant="outline" className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver al menú
+        </Button>
+      )}
     </div>
   )
 }

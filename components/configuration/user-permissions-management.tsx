@@ -105,20 +105,17 @@ function collectPerms(modules: { name: string; label?: string }[]): PermItem[] {
   return out
 }
 
-// Permisos que NO son modulos del menu pero deben poder otorgarse aqui (SIG por norma).
+// Permisos que NO son modulos del menu pero deben poder otorgarse aqui.
+//
+// Las dos firmas del pedido son el caso claro: el modulo "Autorizar Pedidos"
+// se deriva solo del menu y da acceso a VER la bandeja, pero sin estos dos
+// checkboxes nadie podria dar de alta a un autorizador real. Ademas van
+// separadas a proposito: la misma persona no debe poder dar las dos firmas, y
+// eso empieza por poder otorgarlas por separado.
 const EXTRA_PERMS_POR_SUBGRUPO: Record<string, PermItem[]> = {
-  "Sistema Integrado (SIG)": [
-    { key: "sig_iso9001", label: "— Pestaña ISO 9001:2015" },
-    { key: "sig_iso14001", label: "— Pestaña ISO 14001:2015" },
-    { key: "sig_iso45001", label: "— Pestaña ISO 45001:2018" },
-  ],
-  // Roles DENTRO de Ciclo de Facturación -- `ciclo_facturacion` (arriba, auto-
-  // derivado del menú) solo da acceso a VER el módulo; sin estos 2, nadie
-  // podía dar de alta un Jefe o un Coordinador reales (no existía el checkbox
-  // -- bug real encontrado 2026-09-11, ver lib/permissions-map.ts:358-361).
-  Facturación: [
-    { key: "ciclo_facturacion_jefe", label: "— Ciclo de Facturación: rol Jefe (enviar anexo/factura, cerrar)" },
-    { key: "ciclo_facturacion_coordinador", label: "— Ciclo de Facturación: rol Coordinador (subir firmado por el cliente)" },
+  Ventas: [
+    { key: "crm_autorizar_contabilidad", label: "— Autorizar pedidos: firma de Contabilidad" },
+    { key: "crm_autorizar_gerencia", label: "— Autorizar pedidos: firma de Gerencia" },
   ],
 }
 
