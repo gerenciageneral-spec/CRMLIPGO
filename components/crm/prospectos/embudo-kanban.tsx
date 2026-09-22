@@ -16,7 +16,7 @@ import { Loader2, GripVertical, TrendingUp, Users, Target, Filter } from "lucide
 import { useAuth } from "@/components/auth-provider"
 import { getProspectos, getEtapas, moverEtapa, getResumenEmbudo } from "@/lib/crm-prospectos-actions"
 import type { Etapa, ProspectoConEtapa, ResumenEmbudo } from "@/lib/crm-prospectos"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -111,29 +111,30 @@ export function EmbudoKanban() {
         </div>
       </header>
 
+      {/* Tira compacta: el embudo de tarjetas es lo que se viene a leer aquí. */}
       {resumen && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <KpiCard
-            icon={Users}
-            label="Prospectos activos"
-            value={resumen.totalProspectos}
-            accent="info"
+        <TiraKpi>
+          <KpiCompacto
+            icono={Users}
+            etiqueta="Prospectos activos"
+            valor={resumen.totalProspectos}
+            tono="primary"
           />
-          <KpiCard
-            icon={TrendingUp}
-            label="Valor del embudo"
-            value={money(resumen.valorTotal)}
-            accent="primary"
-            trendHint="Suma de las etapas abiertas"
+          <KpiCompacto
+            icono={TrendingUp}
+            etiqueta="Valor del embudo"
+            valor={money(resumen.valorTotal)}
+            tono="primary"
+            detalle="Suma de las etapas abiertas"
           />
-          <KpiCard
-            icon={Target}
-            label="Pronóstico ponderado"
-            value={money(resumen.valorPonderado)}
-            accent="success"
-            trendHint="Ajustado por la probabilidad de cada etapa"
+          <KpiCompacto
+            icono={Target}
+            etiqueta="Pronóstico ponderado"
+            valor={money(resumen.valorPonderado)}
+            tono="success"
+            detalle="Ajustado por la probabilidad de cada etapa"
           />
-        </div>
+        </TiraKpi>
       )}
 
       {/* Scroll horizontal: con siete etapas no caben en pantalla y apilarlas

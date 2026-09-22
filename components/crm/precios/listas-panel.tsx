@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 export function ListasPanel() {
   const { profile, selectedEmpresaId } = useAuth()
@@ -406,11 +407,10 @@ function EditorPrecios({
             </div>
           </div>
 
-          {cargando ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
+          {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+              sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque
+              entero por un spinner hace saltar el diálogo al terminar. */}
+          <MarcoTabla>
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
@@ -423,17 +423,29 @@ function EditorPrecios({
               </TableHeader>
 
               <TableBody>
-                {visibles.slice(0, 150).map((p) => {
+                {cargando ? (
+                  <FilaCargando columnas={5} />
+                ) : visibles.length === 0 ? (
+                  <FilaVacia
+                    columnas={5}
+                    mensaje={
+                      busqueda
+                        ? "Ningún producto coincide con la búsqueda."
+                        : "No hay productos en el catálogo."
+                    }
+                  />
+                ) : (
+                  visibles.slice(0, 150).map((p) => {
                   const d = porProducto.get(p.id)
                   return (
                     <TableRow key={p.id}>
-                      <TableCell className="max-w-[240px] truncate">{p.nombre}</TableCell>
+                      <TableCell className="text-xs max-w-[240px] truncate">{p.nombre}</TableCell>
 
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                      <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
                         {p.precio_base != null ? money(p.precio_base) : "—"}
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell className="text-xs">
                         <Input
                           type="number" min="0"
                           defaultValue={d?.precio_manual ?? ""}
@@ -444,7 +456,7 @@ function EditorPrecios({
                         />
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell className="text-xs">
                         <Input
                           type="number" min="0" max="100"
                           defaultValue={d?.descuento_pct ?? ""}
@@ -455,7 +467,7 @@ function EditorPrecios({
                         />
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell className="text-xs">
                         {d && (
                           <Button
                             variant="ghost" size="icon"
@@ -468,10 +480,11 @@ function EditorPrecios({
                       </TableCell>
                     </TableRow>
                   )
-                })}
+                  })
+                )}
               </TableBody>
             </Table>
-          )}
+          </MarcoTabla>
 
           {visibles.length > 150 && (
             <p className="text-xs text-muted-foreground">
@@ -517,11 +530,9 @@ function VistaPrevia({
           </DialogDescription>
         </DialogHeader>
 
-        {cargando ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
+        {/* Mismo criterio que en el editor: la cabecera se queda en su sitio
+            mientras se calcula la previsualización. */}
+        <MarcoTabla>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -532,16 +543,21 @@ function VistaPrevia({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filas.map((f) => (
+              {cargando ? (
+                <FilaCargando columnas={4} />
+              ) : filas.length === 0 ? (
+                <FilaVacia columnas={4} mensaje="No hay productos para previsualizar." />
+              ) : (
+                filas.map((f) => (
                 <TableRow key={f.producto_id}>
-                  <TableCell className="max-w-[240px] truncate">{f.nombre}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell className="text-xs max-w-[240px] truncate">{f.nombre}</TableCell>
+                  <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
                     {money(f.base)}
                   </TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">
+                  <TableCell className="text-xs text-right font-medium tabular-nums">
                     {money(f.final)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-xs text-right tabular-nums">
                     {f.ahorro > 0 ? (
                       <span className="text-[var(--chart-2)]">-{f.ahorro}%</span>
                     ) : (
@@ -549,10 +565,11 @@ function VistaPrevia({
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
-        )}
+        </MarcoTabla>
 
         <DialogFooter>
           <Button onClick={onCerrar}>Cerrar</Button>

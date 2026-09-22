@@ -18,7 +18,6 @@ import {
 } from "@/lib/crm-cotizaciones"
 import { hoyISO, diasEntre } from "@/lib/crm-fechas"
 import { CotizacionForm } from "./cotizacion-form"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +30,7 @@ import {
 import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 // Color por estado, al estilo de LIPgo: fondo 50, texto 700, borde 200. Se
 // lee de un vistazo cual necesita atencion, que es lo que las variantes
@@ -184,37 +184,36 @@ export function CotizacionesPanel({ onNavigate }: Props) {
         </Select>
       </div>
 
-      {cargando ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : visibles.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <FileText className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {busqueda || filtroEstado !== "todas"
-                ? "Ninguna cotización coincide con el filtro."
-                : "Todavía no hay cotizaciones."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs font-semibold">Número</TableHead>
-                <TableHead className="text-xs font-semibold">Para</TableHead>
-                <TableHead className="text-xs font-semibold">Vigencia</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Total</TableHead>
-                <TableHead className="text-xs font-semibold">Estado</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
+      {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+          sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
+          por un spinner hace saltar el contenido dos veces en cada consulta. */}
+      <MarcoTabla>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="text-xs font-semibold">Número</TableHead>
+              <TableHead className="text-xs font-semibold">Para</TableHead>
+              <TableHead className="text-xs font-semibold">Vigencia</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+              <TableHead className="text-xs font-semibold">Estado</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
 
-            <TableBody>
-              {visibles.map((c) => (
+          <TableBody>
+            {cargando ? (
+              <FilaCargando columnas={6} />
+            ) : visibles.length === 0 ? (
+              <FilaVacia
+                columnas={6}
+                mensaje={
+                  busqueda || filtroEstado !== "todas"
+                    ? "Ninguna cotización coincide con el filtro."
+                    : "Todavía no hay cotizaciones."
+                }
+              />
+            ) : (
+              visibles.map((c) => (
                 <FilaCotizacion
                   key={c.id}
                   cotizacion={c}
@@ -223,11 +222,11 @@ export function CotizacionesPanel({ onNavigate }: Props) {
                   onEstado={(e) => cambiarEstado(c, e)}
                   onConvertir={() => convertir(c)}
                 />
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </MarcoTabla>
     </div>
   )
 }
@@ -249,7 +248,7 @@ function FilaCotizacion({
 
   return (
     <TableRow>
-      <TableCell className="font-medium">
+      <TableCell className="text-xs font-medium">
         {c.numero}
         {c.requiere_autorizacion_descuento && (
           <AlertTriangle
@@ -259,14 +258,14 @@ function FilaCotizacion({
         )}
       </TableCell>
 
-      <TableCell className="max-w-[220px] truncate">
+      <TableCell className="text-xs max-w-[220px] truncate">
         {c.cliente_nombre ?? c.prospecto_nombre ?? "—"}
         {!c.cliente_id && c.prospecto_id && (
           <span className="ml-1.5 text-xs text-muted-foreground">(prospecto)</span>
         )}
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-xs">
         <span className="text-sm">{c.fecha_vencimiento}</span>
         {porVencer && (
           <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-[var(--chart-3)]">
@@ -276,15 +275,15 @@ function FilaCotizacion({
         )}
       </TableCell>
 
-      <TableCell className="text-right font-medium tabular-nums">{money(c.total)}</TableCell>
+      <TableCell className="text-xs text-right font-medium tabular-nums">{money(c.total)}</TableCell>
 
-      <TableCell>
+      <TableCell className="text-xs">
         <Badge variant="outline" className={`font-medium ${tono}`}>
           {ESTADO_COTIZACION_LABEL[c.estado]}
         </Badge>
       </TableCell>
 
-      <TableCell>
+      <TableCell className="text-xs">
         {ocupado ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : (

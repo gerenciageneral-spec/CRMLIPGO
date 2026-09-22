@@ -13,11 +13,10 @@ import {
 } from "@/lib/crm-cartera"
 import { hoyISO } from "@/lib/crm-fechas"
 import { RegistrarPagoDialog } from "./registrar-pago-dialog"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -25,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 export function CxcPanel() {
   const { profile, selectedEmpresaId } = useAuth()
@@ -90,20 +90,20 @@ export function CxcPanel() {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard icon={Wallet} label="Por cobrar" value={money(totales.pendiente)} accent="primary" />
-        <KpiCard
-          icon={AlertTriangle}
-          label="Vencido"
-          value={money(totales.vencido)}
-          accent={totales.vencido > 0 ? "danger" : "neutral"}
-          trendHint={`${totales.cuentasVencidas} factura(s)`}
-          // Subir cartera vencida es mala noticia: sin invertTrend se pintaría
-          // en verde, justo al revés de lo que el gerente necesita ver.
-          invertTrend
+      {/* Indicadores compactos: los de módulo, no los del tablero. */}
+      <TiraKpi>
+        <KpiCompacto etiqueta="Por cobrar" valor={money(totales.pendiente)} icono={Wallet} tono="primary" />
+        <KpiCompacto
+          etiqueta="Vencido"
+          valor={money(totales.vencido)}
+          detalle={`${totales.cuentasVencidas} factura(s)`}
+          icono={AlertTriangle}
+          // Rojo en cuanto hay algo vencido: que suba es mala noticia y el
+          // color tiene que decirlo sin que haya que leer la cifra.
+          tono={totales.vencido > 0 ? "danger" : "neutral"}
         />
-        <KpiCard icon={Receipt} label="Facturas abiertas" value={visibles.length} accent="info" />
-      </div>
+        <KpiCompacto etiqueta="Facturas abiertas" valor={visibles.length} icono={Receipt} tono="primary" />
+      </TiraKpi>
 
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-[240px] flex-1 sm:max-w-sm">
@@ -125,46 +125,43 @@ export function CxcPanel() {
         </Select>
       </div>
 
-      {cargando ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : visibles.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Wallet className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {busqueda ? "Nada coincide con la búsqueda." : "No hay cartera pendiente."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs font-semibold">Cliente</TableHead>
-                <TableHead className="text-xs font-semibold">Factura</TableHead>
-                <TableHead className="text-xs font-semibold">Vence</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Saldo</TableHead>
-                <TableHead className="text-xs font-semibold">Estado</TableHead>
-                <TableHead className="w-24" />
-              </TableRow>
-            </TableHeader>
+      {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+          sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
+          por un spinner hace saltar el contenido dos veces en cada consulta. */}
+      <MarcoTabla>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="text-xs font-semibold">Cliente</TableHead>
+              <TableHead className="text-xs font-semibold">Factura</TableHead>
+              <TableHead className="text-xs font-semibold">Vence</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Valor</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Saldo</TableHead>
+              <TableHead className="text-xs font-semibold">Estado</TableHead>
+              <TableHead className="w-24" />
+            </TableRow>
+          </TableHeader>
 
-            <TableBody>
-              {visibles.map((c) => {
+          <TableBody>
+            {cargando ? (
+              <FilaCargando columnas={7} />
+            ) : visibles.length === 0 ? (
+              <FilaVacia
+                columnas={7}
+                mensaje={busqueda ? "Nada coincide con la búsqueda." : "No hay cartera pendiente."}
+              />
+            ) : (
+              visibles.map((c) => {
                 const dias = diasVencido(c.fecha_vencimiento, hoyISO())
                 const vencida = dias > 0
 
                 return (
                   <TableRow key={c.id} className={vencida ? "bg-destructive/5" : undefined}>
-                    <TableCell className="max-w-[200px] truncate font-medium">
+                    <TableCell className="text-xs max-w-[200px] truncate font-medium">
                       {c.cliente_nombre ?? "—"}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="text-xs">
                       {c.numero_factura ? (
                         <span className="text-sm">{c.numero_factura}</span>
                       ) : (
@@ -182,7 +179,7 @@ export function CxcPanel() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="text-xs">
                       <span className="text-sm">{c.fecha_vencimiento}</span>
                       {vencida && (
                         <p className="text-[11px] font-medium text-destructive">
@@ -191,15 +188,15 @@ export function CxcPanel() {
                       )}
                     </TableCell>
 
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
                       {money(c.valor_original)}
                     </TableCell>
 
-                    <TableCell className="text-right font-semibold tabular-nums">
+                    <TableCell className="text-xs text-right font-semibold tabular-nums">
                       {money(c.saldo)}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="text-xs">
                       {/* Vencida en rojo, abonada en azul, al dia en gris:
                           el color dice que hacer sin leer la fila entera. */}
                       <Badge
@@ -216,7 +213,7 @@ export function CxcPanel() {
                       </Badge>
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="text-xs">
                       <Button size="sm" variant="outline" onClick={() => setCobrando(c)}>
                         <Banknote className="mr-1 h-3.5 w-3.5" />
                         Abonar
@@ -224,11 +221,11 @@ export function CxcPanel() {
                     </TableCell>
                   </TableRow>
                 )
-              })}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+              })
+            )}
+          </TableBody>
+        </Table>
+      </MarcoTabla>
 
       <RegistrarPagoDialog
         cuenta={cobrando}

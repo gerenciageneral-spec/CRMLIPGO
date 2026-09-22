@@ -24,7 +24,7 @@ import {
 } from "@/lib/crm-rutas"
 import { hoyISO, sumarDias, formatearISO, diasEntre } from "@/lib/crm-fechas"
 import { money } from "@/lib/crm-cotizaciones"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -248,20 +248,20 @@ export function RutasPanel() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <KpiCard icon={MapPin} label="Paradas" value={ruta.paradas.length} accent="primary" />
-            <KpiCard icon={Route} label="Distancia" value={ruta.distanciaKm} unit="km" decimals={1} accent="info" />
-            <KpiCard icon={Clock} label="Tiempo estimado" value={formatearDuracion(ruta.tiempoEstimadoMin)} accent="neutral" />
-            <KpiCard
-              icon={TrendingDown}
-              label="Ahorro del orden"
-              value={ruta.mejora}
-              unit="%"
-              decimals={1}
-              accent="success"
-              trendHint="Frente al orden original"
+          {/* Tira compacta: el protagonista del módulo es el mapa con las
+              paradas, no el resumen numérico de la ruta. */}
+          <TiraKpi>
+            <KpiCompacto icono={MapPin} etiqueta="Paradas" valor={ruta.paradas.length} tono="primary" />
+            <KpiCompacto icono={Route} etiqueta="Distancia" valor={`${ruta.distanciaKm.toFixed(1)} km`} tono="primary" />
+            <KpiCompacto icono={Clock} etiqueta="Tiempo estimado" valor={formatearDuracion(ruta.tiempoEstimadoMin)} tono="neutral" />
+            <KpiCompacto
+              icono={TrendingDown}
+              etiqueta="Ahorro del orden"
+              valor={`${ruta.mejora.toFixed(1)}%`}
+              tono="success"
+              detalle="Frente al orden original"
             />
-          </div>
+          </TiraKpi>
 
           <div className="grid gap-4 lg:grid-cols-5">
             <Card className="lg:col-span-3">

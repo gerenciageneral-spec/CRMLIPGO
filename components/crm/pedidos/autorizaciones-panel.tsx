@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaVacia } from "@/components/crm/ui/modulo"
 
 export function AutorizacionesPanel() {
   const { selectedEmpresaId } = useAuth()
@@ -220,23 +221,30 @@ function DetallePedido({
 
         {pedido && (
           <div className="space-y-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead className="text-right">Cant.</TableHead>
-                  <TableHead className="text-right">Precio</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(pedido.lineas ?? []).map((l: LineaPedido) => (
+            {/* El vacío va como fila y no en lugar de la tabla: así la
+                cabecera sigue diciendo qué se está mirando aunque el pedido
+                llegue sin líneas. */}
+            <MarcoTabla>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="text-right">Cant.</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(pedido.lineas ?? []).length === 0 ? (
+                    <FilaVacia columnas={4} mensaje="El pedido no tiene líneas." />
+                  ) : (
+                    (pedido.lineas ?? []).map((l: LineaPedido) => (
                   <TableRow key={l.linea}>
-                    <TableCell className="max-w-[220px] truncate">{l.producto_nombre}</TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-xs max-w-[220px] truncate">{l.producto_nombre}</TableCell>
+                    <TableCell className="text-xs text-right tabular-nums">
                       {Number(l.cantidad).toLocaleString("es-CO")}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-xs text-right tabular-nums">
                       {money(l.precio_unitario)}
                       {Number(l.descuento_pct) > 0 && (
                         <span className="ml-1 text-xs text-[var(--chart-3)]">
@@ -244,13 +252,15 @@ function DetallePedido({
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell className="text-xs text-right font-medium tabular-nums">
                       {money(l.subtotal)}
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </MarcoTabla>
 
             <div className="ml-auto w-full max-w-xs space-y-1 text-sm">
               <div className="flex justify-between text-muted-foreground">

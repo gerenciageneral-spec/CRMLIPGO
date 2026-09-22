@@ -19,7 +19,7 @@ import {
 import { getParam } from "@/lib/crm-parametros-actions"
 import { PARAM, MOMENTO_COMISION_LABEL, type MomentoComision } from "@/lib/crm-parametros"
 import { hoyISO } from "@/lib/crm-fechas"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +30,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 // Color por estado, al estilo de LIPgo.
 const BADGE: Record<EstadoComision, string> = {
@@ -113,14 +114,6 @@ export function ComisionesPanel() {
     toast({ title: `Comisión ${ESTADO_COMISION_LABEL[estado].toLowerCase()}` })
   }
 
-  if (cargando) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -144,11 +137,12 @@ export function ComisionesPanel() {
         </Select>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard icon={Percent} label="Por pagar" value={money(totales.pendiente)} accent="warning" />
-        <KpiCard icon={Banknote} label="Pagado en el período" value={money(totales.pagado)} accent="success" />
-        <KpiCard icon={Users} label="Vendedores con comisión" value={totales.vendedores.length} accent="info" />
-      </div>
+      {/* Indicadores compactos: los de módulo, no los del tablero. */}
+      <TiraKpi>
+        <KpiCompacto etiqueta="Por pagar" valor={money(totales.pendiente)} icono={Percent} tono="warning" />
+        <KpiCompacto etiqueta="Pagado en el período" valor={money(totales.pagado)} icono={Banknote} tono="success" />
+        <KpiCompacto etiqueta="Vendedores con comisión" valor={totales.vendedores.length} icono={Users} tono="primary" />
+      </TiraKpi>
 
       {reglas.length > 0 && (
         <Alert>
@@ -183,48 +177,45 @@ export function ComisionesPanel() {
         </Card>
       )}
 
-      {comisiones.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Percent className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              No hay comisiones en {periodo}.
-            </p>
-            <p className="max-w-sm text-xs text-muted-foreground">
-              Se liquidan {MOMENTO_COMISION_LABEL[momento].toLowerCase()}. El momento
-              se configura en Parametrización.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs font-semibold">Vendedor</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Base</TableHead>
-                <TableHead className="text-xs font-semibold text-center">%</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Comisión</TableHead>
-                <TableHead className="text-xs font-semibold">Estado</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
+      {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+          sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
+          por un spinner hace saltar el contenido dos veces en cada consulta. */}
+      <MarcoTabla>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="text-xs font-semibold">Vendedor</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Base</TableHead>
+              <TableHead className="text-xs font-semibold text-center">%</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Comisión</TableHead>
+              <TableHead className="text-xs font-semibold">Estado</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
 
-            <TableBody>
-              {comisiones.map((c) => (
+          <TableBody>
+            {cargando ? (
+              <FilaCargando columnas={6} />
+            ) : comisiones.length === 0 ? (
+              <FilaVacia
+                columnas={6}
+                mensaje={`No hay comisiones en ${periodo}. Se liquidan ${MOMENTO_COMISION_LABEL[momento].toLowerCase()}; el momento se configura en Parametrización.`}
+              />
+            ) : (
+              comisiones.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.vendedor_nombre ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell className="text-xs font-medium">{c.vendedor_nombre ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
                     {money(c.base_calculo)}
                   </TableCell>
-                  <TableCell className="text-center tabular-nums">{Number(c.porcentaje)}%</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
+                  <TableCell className="text-xs text-center tabular-nums">{Number(c.porcentaje)}%</TableCell>
+                  <TableCell className="text-xs text-right font-semibold tabular-nums">
                     {money(c.valor)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     <Badge variant="outline" className={`font-medium ${BADGE[c.estado]}`}>{ESTADO_COMISION_LABEL[c.estado]}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     {ocupado === c.id ? (
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : c.estado !== "pagada" && c.estado !== "anulada" ? (
@@ -252,11 +243,11 @@ export function ComisionesPanel() {
                     ) : null}
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </MarcoTabla>
     </div>
   )
 }

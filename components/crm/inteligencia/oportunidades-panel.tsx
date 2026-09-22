@@ -17,7 +17,7 @@ import {
 } from "@/lib/crm-oportunidades-actions"
 import { TIPO_OPORTUNIDAD_LABEL } from "@/lib/crm-oportunidades"
 import { money } from "@/lib/crm-cotizaciones"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -118,22 +118,24 @@ export function OportunidadesPanel({ onNavigate }: Props) {
         </Button>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard icon={Sparkles} label="Oportunidades" value={oportunidades.length} accent="primary" />
-        <KpiCard
-          icon={TrendingUp}
-          label="Valor potencial"
-          value={money(resumen.valorTotal)}
-          accent="success"
-          trendHint="Suma de lo estimable"
+      {/* Tira compacta: el valor del módulo está en la lista de oportunidades;
+          el resumen solo la encuadra. */}
+      <TiraKpi>
+        <KpiCompacto icono={Sparkles} etiqueta="Oportunidades" valor={oportunidades.length} tono="primary" />
+        <KpiCompacto
+          icono={TrendingUp}
+          etiqueta="Valor potencial"
+          valor={money(resumen.valorTotal)}
+          tono="success"
+          detalle="Suma de lo estimable"
         />
-        <KpiCard
-          icon={Clock}
-          label="Requieren atención pronto"
-          value={resumen.urgentes}
-          accent={resumen.urgentes > 0 ? "warning" : "neutral"}
+        <KpiCompacto
+          icono={Clock}
+          etiqueta="Requieren atención pronto"
+          valor={resumen.urgentes}
+          tono={resumen.urgentes > 0 ? "warning" : "neutral"}
         />
-      </div>
+      </TiraKpi>
 
       {oportunidades.length === 0 ? (
         <Card>

@@ -11,7 +11,7 @@ import { Loader2, Search, Store, MapPin, Building2, ChevronRight } from "lucide-
 import { useAuth } from "@/components/auth-provider"
 import { getSucursalesCrm, getClientesCrm } from "@/lib/crm-catalogos-actions"
 import type { SucursalCrm, ClienteCrm } from "@/lib/crm-catalogos"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -106,21 +106,23 @@ export function SucursalesPanel() {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard icon={Store} label="Sucursales activas" value={totales.total} accent="info" />
-        <KpiCard
-          icon={MapPin}
-          label="Con ubicación GPS"
-          value={totales.conGps}
-          accent={totales.conGps < totales.total ? "warning" : "success"}
-          trendHint={
+      {/* Tira compacta: aquí lo que importa es el listado de sucursales, así
+          que los indicadores acompañan sin robarle la mirada. */}
+      <TiraKpi>
+        <KpiCompacto icono={Store} etiqueta="Sucursales activas" valor={totales.total} tono="primary" />
+        <KpiCompacto
+          icono={MapPin}
+          etiqueta="Con ubicación GPS"
+          valor={totales.conGps}
+          tono={totales.conGps < totales.total ? "warning" : "success"}
+          detalle={
             totales.conGps < totales.total
               ? `Faltan ${totales.total - totales.conGps} para rutas`
               : "Todas ubicadas"
           }
         />
-        <KpiCard icon={Building2} label="Ciudades" value={totales.ciudades} accent="primary" />
-      </div>
+        <KpiCompacto icono={Building2} etiqueta="Ciudades" valor={totales.ciudades} tono="primary" />
+      </TiraKpi>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

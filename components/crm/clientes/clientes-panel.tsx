@@ -18,7 +18,7 @@ import { getVendedoresCrm } from "@/lib/crm-catalogos-actions"
 import type { ClienteCrm, VendedorCrm } from "@/lib/crm-catalogos"
 import { money } from "@/lib/crm-cotizaciones"
 import { GpsCapture, type Ubicacion } from "@/components/crm/prospectos/gps-capture"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 const SIN_LISTA = "__ninguna__"
 const SIN_VENDEDOR = "__ninguno__"
@@ -102,17 +103,23 @@ export function ClientesPanel() {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <KpiCard icon={Users} label="Clientes activos" value={clientes.length} accent="info" />
-        <KpiCard icon={Wallet} label="Cupo otorgado" value={money(totales.cupoTotal)} accent="primary" trendHint={`${totales.conCupo} con crédito`} />
-        <KpiCard
-          icon={ShieldAlert}
-          label="Bloqueados"
-          value={totales.bloqueados}
-          accent={totales.bloqueados > 0 ? "danger" : "neutral"}
-          invertTrend
+      {/* Indicadores compactos: los de módulo, no los del tablero. */}
+      <TiraKpi>
+        <KpiCompacto etiqueta="Clientes activos" valor={clientes.length} icono={Users} tono="primary" />
+        <KpiCompacto
+          etiqueta="Cupo otorgado"
+          valor={money(totales.cupoTotal)}
+          detalle={`${totales.conCupo} con crédito`}
+          icono={Wallet}
+          tono="primary"
         />
-      </div>
+        <KpiCompacto
+          etiqueta="Bloqueados"
+          valor={totales.bloqueados}
+          icono={ShieldAlert}
+          tono={totales.bloqueados > 0 ? "danger" : "neutral"}
+        />
+      </TiraKpi>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -124,12 +131,11 @@ export function ClientesPanel() {
         />
       </div>
 
-      {cargando ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <Card>
+      {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+          sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
+          por un spinner hace saltar el contenido dos veces en cada consulta. */}
+      <Card>
+        <MarcoTabla>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -142,9 +148,21 @@ export function ClientesPanel() {
             </TableHeader>
 
             <TableBody>
-              {visibles.slice(0, 200).map((c) => (
+              {cargando ? (
+                <FilaCargando columnas={5} />
+              ) : visibles.length === 0 ? (
+                <FilaVacia
+                  columnas={5}
+                  mensaje={
+                    busqueda
+                      ? "Ningún cliente coincide con la búsqueda."
+                      : "Todavía no hay clientes."
+                  }
+                />
+              ) : (
+                visibles.slice(0, 200).map((c) => (
                 <TableRow key={c.id} className={c.bloqueado_cartera ? "bg-destructive/5" : undefined}>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     <p className="max-w-[220px] truncate font-medium">{c.nombre}</p>
                     <div className="flex items-center gap-1.5">
                       {c.documento && (
@@ -169,7 +187,7 @@ export function ClientesPanel() {
                     )}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="text-xs">
                     {c.lista_precio_nombre ? (
                       <Badge variant="outline" className="text-xs">
                         <Tag className="mr-1 h-3 w-3" />
@@ -180,7 +198,7 @@ export function ClientesPanel() {
                     )}
                   </TableCell>
 
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-xs text-right tabular-nums">
                     {c.cupo_credito > 0 ? (
                       <>
                         <span className="font-medium">{money(c.cupo_credito)}</span>
@@ -191,23 +209,24 @@ export function ClientesPanel() {
                     )}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="text-xs">
                     <Button variant="ghost" size="icon" onClick={() => abrirEdicion(c)} aria-label="Editar">
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
+        </MarcoTabla>
 
-          {visibles.length > 200 && (
-            <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-              Se muestran 200 de {visibles.length}. Usa la búsqueda para acotar.
-            </p>
-          )}
-        </Card>
-      )}
+        {visibles.length > 200 && (
+          <p className="border-t px-4 py-2 text-xs text-muted-foreground">
+            Se muestran 200 de {visibles.length}. Usa la búsqueda para acotar.
+          </p>
+        )}
+      </Card>
 
       {editando && (
         <EditorCliente

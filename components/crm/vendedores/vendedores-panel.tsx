@@ -13,7 +13,7 @@ import {
   type VendedorCompleto,
 } from "@/lib/crm-vendedores-actions"
 import { money } from "@/lib/crm-cotizaciones"
-import { KpiCard } from "@/components/crm/ui/kpi-card"
+import { KpiCompacto, TiraKpi } from "@/components/crm/ui/kpi-compacto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -98,27 +98,33 @@ export function VendedoresPanel() {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard icon={UserCheck} label="Equipo comercial" value={vendedores.length} accent="info" />
-        <KpiCard icon={TrendingUp} label="Ventas del mes" value={money(totales.ventas)} accent="primary" />
-        <KpiCard icon={Target} label="Meta del equipo" value={money(totales.meta)} accent="neutral" trendHint={`${totales.conMeta} con meta`} />
-        <KpiCard
-          icon={Target}
-          label="Cumplimiento"
-          value={totales.cumplimiento}
-          unit="%"
-          decimals={1}
-          accent={totales.cumplimiento >= 100 ? "success" : totales.cumplimiento >= 70 ? "warning" : "danger"}
+      {/* Indicadores compactos, no las tarjetas del tablero: dentro de un
+          módulo acompañan al listado sin quitarle protagonismo. */}
+      <TiraKpi>
+        <KpiCompacto etiqueta="Equipo comercial" valor={vendedores.length} icono={UserCheck} tono="primary" />
+        <KpiCompacto etiqueta="Ventas del mes" valor={money(totales.ventas)} icono={TrendingUp} tono="success" />
+        <KpiCompacto
+          etiqueta="Meta del equipo"
+          valor={money(totales.meta)}
+          detalle={`${totales.conMeta} con meta definida`}
+          icono={Target}
+          tono="neutral"
         />
-      </div>
+        <KpiCompacto
+          etiqueta="Cumplimiento"
+          valor={`${totales.cumplimiento.toFixed(1)}%`}
+          icono={Target}
+          tono={totales.cumplimiento >= 100 ? "success" : totales.cumplimiento >= 70 ? "warning" : "danger"}
+        />
+      </TiraKpi>
 
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Buscar vendedor o zona…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          className="pl-9"
+          className="h-8 pl-9 text-xs"
         />
       </div>
 

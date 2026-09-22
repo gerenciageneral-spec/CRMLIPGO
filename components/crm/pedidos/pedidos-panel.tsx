@@ -8,14 +8,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  Loader2, Search, Send, CheckCircle2, Clock, AlertTriangle, ExternalLink, FileText, ClipboardList } from "lucide-react"
+  Loader2, Search, Send, CheckCircle2, Clock, AlertTriangle, ExternalLink, ClipboardList } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getPedidos, enviarPedidoALipgo } from "@/lib/crm-pedidos-actions"
 import {
   ESTADO_PEDIDO_LABEL, firmasPendientes, ROL_LABEL, money,
   type PedidoConDetalle, type EstadoPedido,
 } from "@/lib/crm-pedidos"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +24,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { toast } from "@/hooks/use-toast"
+import { MarcoTabla, FilaCargando, FilaVacia } from "@/components/crm/ui/modulo"
 
 // Color por estado, al estilo de LIPgo. El ambar de "falta una firma" y el
 // azul de "enviado a operacion" distinguen de un vistazo lo que espera accion
@@ -131,110 +131,109 @@ export function PedidosPanel() {
           </Select>
         </div>
 
-        {cargando ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : visibles.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-              <FileText className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                {busqueda || filtroEstado !== "todos"
-                  ? "Ningún pedido coincide con el filtro."
-                  : "Todavía no hay pedidos. Se crean al aceptar una cotización."}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="text-xs font-semibold">Número</TableHead>
-                  <TableHead className="text-xs font-semibold">Cliente</TableHead>
-                  <TableHead className="text-xs font-semibold">Pago</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Total</TableHead>
-                  <TableHead className="text-xs font-semibold">Firmas</TableHead>
-                  <TableHead className="text-xs font-semibold">Estado</TableHead>
-                  <TableHead className="w-32" />
-                </TableRow>
-              </TableHeader>
+        {/* La tabla no desaparece mientras carga: la cabecera se queda en su
+            sitio y el aviso de carga ocupa el cuerpo. Cambiar el bloque entero
+            por un spinner hace saltar el contenido dos veces en cada consulta. */}
+        <MarcoTabla>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold">Número</TableHead>
+                <TableHead className="text-xs font-semibold">Cliente</TableHead>
+                <TableHead className="text-xs font-semibold">Pago</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Total</TableHead>
+                <TableHead className="text-xs font-semibold">Firmas</TableHead>
+                <TableHead className="text-xs font-semibold">Estado</TableHead>
+                <TableHead className="w-32" />
+              </TableRow>
+            </TableHeader>
 
-              <TableBody>
-                {visibles.map((p) => {
-                  const faltan = firmasPendientes(p)
-                  const listo = p.estado === "autorizado" && !p.idpedido_lipgo
-                  const tono = BADGE[p.estado]
+            <TableBody>
+              {cargando ? (
+                <FilaCargando columnas={7} />
+              ) : visibles.length === 0 ? (
+                <FilaVacia
+                  columnas={7}
+                  mensaje={
+                    busqueda || filtroEstado !== "todos"
+                      ? "Ningún pedido coincide con el filtro."
+                      : "Todavía no hay pedidos. Se crean al aceptar una cotización."
+                  }
+                />
+              ) : (
+                visibles.map((p) => {
+                const faltan = firmasPendientes(p)
+                const listo = p.estado === "autorizado" && !p.idpedido_lipgo
+                const tono = BADGE[p.estado]
 
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.numero}</TableCell>
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-xs font-medium">{p.numero}</TableCell>
 
-                      <TableCell className="max-w-[200px] truncate">
-                        {p.cliente_nombre ?? "—"}
-                      </TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">
+                      {p.cliente_nombre ?? "—"}
+                    </TableCell>
 
-                      <TableCell>
-                        <span className="text-sm">
-                          {p.forma_pago === "credito" ? `Crédito ${p.dias_credito} d` : "Contado"}
+                    <TableCell className="text-xs">
+                      <span className="text-sm">
+                        {p.forma_pago === "credito" ? `Crédito ${p.dias_credito} d` : "Contado"}
+                      </span>
+                    </TableCell>
+
+                    <TableCell className="text-xs text-right font-medium tabular-nums">
+                      {money(p.total)}
+                    </TableCell>
+
+                    <TableCell className="text-xs">
+                      <Firmas pedido={p} />
+                    </TableCell>
+
+                    <TableCell className="text-xs">
+                      <Badge variant="outline" className={`font-medium ${tono}`}>
+                        {ESTADO_PEDIDO_LABEL[p.estado]}
+                      </Badge>
+                      {p.error_lipgo && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-destructive" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">{p.error_lipgo}</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+
+                    <TableCell className="text-xs">
+                      {p.idpedido_lipgo ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <ExternalLink className="h-3 w-3" />
+                          Op. #{p.idpedido_lipgo}
                         </span>
-                      </TableCell>
-
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {money(p.total)}
-                      </TableCell>
-
-                      <TableCell>
-                        <Firmas pedido={p} />
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline" className={`font-medium ${tono}`}>
-                          {ESTADO_PEDIDO_LABEL[p.estado]}
-                        </Badge>
-                        {p.error_lipgo && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <AlertTriangle className="ml-1.5 inline h-3.5 w-3.5 text-destructive" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">{p.error_lipgo}</TooltipContent>
-                          </Tooltip>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        {p.idpedido_lipgo ? (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <ExternalLink className="h-3 w-3" />
-                            Op. #{p.idpedido_lipgo}
-                          </span>
-                        ) : listo ? (
-                          <Button
-                            size="sm"
-                            onClick={() => enviar(p)}
-                            disabled={enviando === p.id}
-                          >
-                            {enviando === p.id ? (
-                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Send className="mr-1 h-3.5 w-3.5" />
-                            )}
-                            Enviar
-                          </Button>
-                        ) : faltan.length ? (
-                          <span className="text-xs text-muted-foreground">
-                            Falta {faltan.map((r) => ROL_LABEL[r]).join(" y ")}
-                          </span>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
+                      ) : listo ? (
+                        <Button
+                          size="sm"
+                          onClick={() => enviar(p)}
+                          disabled={enviando === p.id}
+                        >
+                          {enviando === p.id ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          Enviar
+                        </Button>
+                      ) : faltan.length ? (
+                        <span className="text-xs text-muted-foreground">
+                          Falta {faltan.map((r) => ROL_LABEL[r]).join(" y ")}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
                   )
-                })}
-              </TableBody>
+                })
+              )}
+            </TableBody>
             </Table>
-          </Card>
-        )}
+        </MarcoTabla>
       </div>
     </TooltipProvider>
   )
