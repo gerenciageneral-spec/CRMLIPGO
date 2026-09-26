@@ -38,7 +38,7 @@ interface TopBarProps {
  *  y su ruta /api/crm/<endpoint>-alerts. */
 const DOMINIOS: {
   endpoint: string
-  permiso: string
+  permiso: string | string[]
   titulo: string
   icono: LucideIcon
   color: string
@@ -48,7 +48,7 @@ const DOMINIOS: {
   { endpoint: "prospectos",     permiso: "crm_prospectos",             titulo: "Prospectos sin gestión", icono: UserPlus,      color: "text-[var(--chart-4)]", moduloDestino: "Embudo de Ventas" },
   { endpoint: "cotizaciones",   permiso: "crm_cotizaciones",           titulo: "Cotizaciones por vencer", icono: FileWarning,  color: "text-[var(--chart-3)]", moduloDestino: "Cotizaciones" },
   { endpoint: "cartera",        permiso: "crm_cartera",                titulo: "Cartera vencida",       icono: Wallet,        color: "text-destructive",      moduloDestino: "Cuentas por Cobrar" },
-  { endpoint: "autorizaciones", permiso: "crm_autorizar_contabilidad", titulo: "Esperando tu firma",    icono: Stamp,         color: "text-[var(--chart-2)]", moduloDestino: "Autorizar Pedidos" },
+  { endpoint: "autorizaciones", permiso: ["crm_autorizar_contabilidad", "crm_autorizar_gerencia"], titulo: "Esperando tu firma",    icono: Stamp,         color: "text-[var(--chart-2)]", moduloDestino: "Autorizar Pedidos" },
 ]
 
 export function TopBar({ onNavigateModule }: TopBarProps) {
@@ -149,7 +149,7 @@ function AlertaIcono({
   empresaId, userId, onIr,
 }: {
   endpoint: string
-  permiso: string
+  permiso: string | string[]
   titulo: string
   icono: LucideIcon
   color: string

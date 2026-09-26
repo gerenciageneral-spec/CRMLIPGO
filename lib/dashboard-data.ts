@@ -3,6 +3,7 @@ import {
   FileText, ShoppingCart, CheckCircle, Store, Tag, Wallet, Banknote,
   TrendingUp, Route, Sparkles, BarChart3, Package, UserCheck, Settings,
   Lock, History, Percent, type LucideIcon,
+  Cable,
 } from "lucide-react"
 
 export interface Module {
@@ -131,6 +132,7 @@ export const groups: Group[] = [
           { name: "Parametrización", icon: Settings },
           { name: "Gestión de Usuarios", icon: Lock },
           { name: "Bitácora de Auditoría", icon: History },
+          { name: "Integraciones", icon: Cable },
         ],
       },
     ],

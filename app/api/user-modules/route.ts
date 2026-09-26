@@ -3,7 +3,7 @@ import { getUserPermissions } from "@/lib/permissions-actions"
 // MODULE_PERMISSION_MAP vive en `permissions-map.ts` (sin "use server"),
 // porque Next.js no permite exportar valores no async desde un archivo
 // con la directiva "use server".
-import { MODULE_PERMISSION_MAP } from "@/lib/permissions-map"
+import { MODULE_PERMISSION_MAP, puedeVerModulo } from "@/lib/permissions-map"
 
 // Render dinámico explícito: los permisos cambian en caliente (Gestión de
 // Usuarios) y una respuesta cacheada dejaría al usuario sin ver un módulo que
@@ -37,10 +37,11 @@ export async function GET() {
       return NextResponse.json({ protectedModules, allowedModules: [] })
     }
 
-    const allowedModules = protectedModules.filter((moduleName) => {
-      const key = MODULE_PERMISSION_MAP[moduleName]
-      return permissions[key] === true
-    })
+    // puedeVerModulo considera tambien los permisos alternativos (p. ej. la
+    // bandeja de firmas la ve quien pueda dar cualquiera de las dos firmas).
+    const allowedModules = protectedModules.filter((moduleName) =>
+      puedeVerModulo(permissions as unknown as Record<string, unknown>, moduleName),
+    )
 
     return NextResponse.json({ protectedModules, allowedModules })
   } catch (error) {

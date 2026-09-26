@@ -6,6 +6,9 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getParam, getParamNumber } from "@/lib/crm-parametros-actions"
 import { PARAM } from "@/lib/crm-parametros"
 import { hoyISO } from "@/lib/crm-fechas"
+import {
+  exigirPermiso, filtrarPorVendedor, asegurarClienteVisible, mensajeError,
+} from "@/lib/crm-auth"
 import type {
   CuentaPorCobrar, CuentaConAging, Pago, ResumenAging,
   Comision, ReglaComision, MomentoComision, EstadoCuenta,
@@ -18,7 +21,7 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-cartera]", msg)
   return { success: false, error: msg }
 }
@@ -30,8 +33,14 @@ export async function getCuentasPorCobrar(
   filtros?: { clienteId?: number; estado?: EstadoCuenta; soloVencidas?: boolean },
 ): Promise<ActionResult<CuentaPorCobrar[]>> {
   try {
+    const ctx = await exigirPermiso(
+      "getCuentasPorCobrar",
+      "crm_cartera", "crm_pagos", "crm_recaudos_registrar", "crm_recaudos_aprobar",
+    )
     const supabase = await getSupabaseAdmin()
     let q = supabase.from("crm_cuentas_cobrar").select("*").eq("idempresa", empresaId)
+    // Un vendedor ve solo la cartera de sus ventas.
+    q = filtrarPorVendedor(q, ctx, "vendedor_id")
 
     if (filtros?.clienteId) q = q.eq("cliente_id", filtros.clienteId)
     if (filtros?.estado) q = q.eq("estado", filtros.estado)
@@ -57,8 +66,10 @@ export async function getAging(
   clienteId?: number,
 ): Promise<ActionResult<{ cuentas: CuentaConAging[]; resumen: ResumenAging }>> {
   try {
+    const ctx = await exigirPermiso("getAging", "crm_cartera", "crm_recaudos_aprobar")
     const supabase = await getSupabaseAdmin()
     let q = supabase.from("crm_cartera_aging").select("*").eq("idempresa", empresaId)
+    q = filtrarPorVendedor(q, ctx, "vendedor_id")
     if (clienteId) q = q.eq("cliente_id", clienteId)
 
     const { data, error } = await q.order("tramo_orden", { ascending: false }).order("dias_vencido", { ascending: false })
@@ -114,6 +125,8 @@ export async function asignarNumeroFactura(
   empresaId = 1,
 ): Promise<ActionResult<CuentaPorCobrar>> {
   try {
+    // Un vendedor NO edita facturas (CAR-01): el numero lo pone contabilidad.
+    await exigirPermiso("asignarNumeroFactura", "crm_recaudos_aprobar", "crm_maestros_admin")
     if (!numeroFactura.trim()) return { success: false, error: "Escribe el número de factura" }
 
     const supabase = await getSupabaseAdmin()
@@ -136,6 +149,10 @@ export async function asignarNumeroFactura(
 
 export async function getPagos(cuentaId: number): Promise<ActionResult<Pago[]>> {
   try {
+    await exigirPermiso(
+      "getPagos",
+      "crm_cartera", "crm_pagos", "crm_recaudos_registrar", "crm_recaudos_aprobar",
+    )
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_pagos")
@@ -166,10 +183,14 @@ export async function registrarPago(
     soporte_url?: string
     observacion?: string
   },
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<{ pago: Pago; saldoNuevo: number; liquidoComision: boolean }>> {
   try {
+    // Quien registra sale de la sesion; el argumento se conserva por
+    // compatibilidad con los llamados existentes y se ignora.
+    const ctx = await exigirPermiso("registrarPago", "crm_pagos", "crm_recaudos_registrar")
+    const usuario = ctx.nombre
     if (!pago.valor || pago.valor <= 0) {
       return { success: false, error: "El valor del abono debe ser mayor que cero" }
     }
@@ -184,6 +205,8 @@ export async function registrarPago(
       .maybeSingle()
 
     if (!cuenta) return { success: false, error: "La cuenta no existe" }
+    // Un vendedor no abona a la cuenta de un cliente ajeno adivinando el id.
+    await asegurarClienteVisible(ctx, cuenta.cliente_id)
     if (cuenta.estado === "anulada") return { success: false, error: "La cuenta está anulada" }
 
     const saldoActual = Number(cuenta.saldo) || 0
@@ -223,7 +246,9 @@ export async function registrarPago(
     if (saldoNuevo <= 0) {
       const momento = (await getParam(PARAM.COMISION_MOMENTO, empresaId)) as MomentoComision
       if (momento === "recaudo") {
-        const res = await liquidarComision(pago.cuenta_cobrar_id, usuario, empresaId)
+        // Version interna: quien registra el pago no necesita permiso de
+        // comisiones para que la comision se cause; eso lo decide el negocio.
+        const res = await liquidarComisionInterna(pago.cuenta_cobrar_id, usuario, empresaId)
         liquidoComision = res.success
       }
     }
@@ -236,6 +261,7 @@ export async function registrarPago(
 
 export async function anularPago(pagoId: number, empresaId = 1): Promise<ActionResult<null>> {
   try {
+    await exigirPermiso("anularPago", "crm_recaudos_aprobar")
     const supabase = await getSupabaseAdmin()
     // El trigger recalcula el saldo al borrar, igual que al insertar.
     const { error } = await supabase
@@ -258,8 +284,11 @@ export async function getComisiones(
   filtros?: { vendedorId?: number; periodo?: string; estado?: string },
 ): Promise<ActionResult<Comision[]>> {
   try {
+    const ctx = await exigirPermiso("getComisiones", "crm_comisiones")
     const supabase = await getSupabaseAdmin()
     let q = supabase.from("crm_comisiones").select("*").eq("idempresa", empresaId)
+    // Un vendedor ve solo sus comisiones, aunque pida las de otro en el filtro.
+    q = filtrarPorVendedor(q, ctx, "vendedor_id")
 
     if (filtros?.vendedorId) q = q.eq("vendedor_id", filtros.vendedorId)
     if (filtros?.periodo) q = q.eq("periodo", filtros.periodo)
@@ -287,19 +316,26 @@ export async function getComisiones(
 
 export async function getReglasComision(empresaId = 1): Promise<ActionResult<ReglaComision[]>> {
   try {
-    const supabase = await getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from("crm_reglas_comision")
-      .select("*")
-      .eq("idempresa", empresaId)
-      .eq("activo", true)
-      .order("prioridad", { ascending: false })
-
-    if (error) return { success: false, error: error.message }
-    return { success: true, data: (data ?? []) as ReglaComision[] }
+    await exigirPermiso("getReglasComision", "crm_comisiones")
+    return await getReglasComisionInterna(empresaId)
   } catch (err) {
     return fallo(err)
   }
+}
+
+/** Sin validacion de permisos: la usa la liquidacion, que puede dispararse al
+ *  registrar un pago alguien sin permiso de comisiones. */
+async function getReglasComisionInterna(empresaId: number): Promise<ActionResult<ReglaComision[]>> {
+  const supabase = await getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from("crm_reglas_comision")
+    .select("*")
+    .eq("idempresa", empresaId)
+    .eq("activo", true)
+    .order("prioridad", { ascending: false })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: (data ?? []) as ReglaComision[] }
 }
 
 /**
@@ -313,7 +349,7 @@ async function resolverRegla(
   empresaId: number,
   contexto: { vendedorId?: number | null; clienteId?: number | null; categoria?: string | null },
 ): Promise<ReglaComision | null> {
-  const res = await getReglasComision(empresaId)
+  const res = await getReglasComisionInterna(empresaId)
   if (!res.success || !res.data?.length) return null
 
   const hoy = hoyISO()
@@ -354,8 +390,29 @@ async function resolverRegla(
  */
 export async function liquidarComision(
   cuentaId: number,
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
+): Promise<ActionResult<Comision>> {
+  try {
+    // Quien liquida sale de la sesion, no del argumento.
+    const ctx = await exigirPermiso("liquidarComision", "crm_comisiones")
+    return await liquidarComisionInterna(cuentaId, ctx.nombre, empresaId)
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/**
+ * Cuerpo de la liquidacion, sin validacion de permisos. Lo usan la accion
+ * exportada (que valida) y registrarPago, que liquida al saldar la cuenta: ahi
+ * el permiso que cuenta es el de registrar el pago, no el de comisiones.
+ *
+ * @param usuario nombre tomado de la sesion por quien llama, nunca del navegador.
+ */
+async function liquidarComisionInterna(
+  cuentaId: number,
+  usuario: string,
+  empresaId: number,
 ): Promise<ActionResult<Comision>> {
   try {
     const supabase = await getSupabaseAdmin()
@@ -438,6 +495,7 @@ export async function cambiarEstadoComision(
   empresaId = 1,
 ): Promise<ActionResult<Comision>> {
   try {
+    await exigirPermiso("cambiarEstadoComision", "crm_comisiones")
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_comisiones")

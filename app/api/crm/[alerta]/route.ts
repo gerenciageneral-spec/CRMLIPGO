@@ -1,0 +1,183 @@
+// Alertas de la campana: /api/crm/<dominio>-alerts.
+//
+// La campana (hooks/useCrmAlerts.ts) consultaba cinco rutas que nunca se
+// crearon, asi que no mostraba nada. Aqui estan las cinco en una sola ruta:
+// son la misma mecanica con distinta consulta.
+//
+// CONTRATO: responde SIEMPRE { alerts, count } con 200, aunque falle. Una
+// alerta rota no puede tumbar la barra superior.
+//
+// Cada consulta respeta el alcance del usuario: un vendedor ve las alertas de
+// lo suyo, no las de todo el equipo. Las rutas estaticas (upload-imagen)
+// tienen prioridad sobre esta, asi que no se pisan.
+
+import { NextResponse, type NextRequest } from "next/server"
+import { empresaPermitida, filtrarPorVendedor, getContexto, tienePermiso, type ContextoCrm } from "@/lib/crm-auth"
+import { getSupabaseAdminAsSystem } from "@/lib/supabase-admin"
+import { leerParamNumber } from "@/lib/crm-parametros-server"
+import { PARAM } from "@/lib/crm-parametros"
+import { hoyISO, sumarDias } from "@/lib/crm-fechas"
+
+export const dynamic = "force-dynamic"
+
+interface Alerta {
+  tipo: string
+  mensaje: string
+  id?: number | string
+  fecha?: string | null
+}
+
+const vacio = () => NextResponse.json({ alerts: [], count: 0 })
+
+const money = (n: number) =>
+  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
+
+type Generador = (ctx: ContextoCrm, empresaId: number) => Promise<Alerta[]>
+
+const DOMINIOS: Record<string, { permisos: string[]; generar: Generador }> = {
+  // Visitas y compromisos de hoy, pendientes.
+  agenda: {
+    permisos: ["crm_agenda"],
+    generar: async (ctx, empresaId) => {
+      const sb = await getSupabaseAdminAsSystem()
+      let q = sb
+        .from("crm_agenda")
+        .select("id, titulo, fecha, hora_inicio")
+        .eq("idempresa", empresaId)
+        .eq("estado", "pendiente")
+        .lte("fecha", hoyISO())
+      // Un vendedor ve lo suyo; quien no es vendedor, lo que tiene asignado.
+      q = ctx.alcance === "propios" ? filtrarPorVendedor(q, ctx, "vendedor_id") : q.eq("usuario_asignado", ctx.userId)
+      const { data } = await q.order("fecha").order("hora_inicio").limit(20)
+      const hoy = hoyISO()
+      return (data ?? []).map((c) => ({
+        tipo: c.fecha < hoy ? "atrasada" : "hoy",
+        id: c.id,
+        fecha: c.fecha,
+        mensaje: `${c.fecha < hoy ? "Atrasada: " : ""}${c.titulo}${c.hora_inicio ? ` · ${String(c.hora_inicio).slice(0, 5)}` : ""}`,
+      }))
+    },
+  },
+
+  // Prospectos con el seguimiento vencido, en etapas abiertas.
+  prospectos: {
+    permisos: ["crm_prospectos", "crm_embudo"],
+    generar: async (ctx, empresaId) => {
+      const sb = await getSupabaseAdminAsSystem()
+      const { data: cerradas } = await sb
+        .from("crm_etapas")
+        .select("id")
+        .eq("idempresa", empresaId)
+        .or("es_ganada.eq.true,es_perdida.eq.true")
+      const idsCerradas = (cerradas ?? []).map((e) => e.id)
+
+      let q = sb
+        .from("crm_prospectos")
+        .select("id, razon_social, proxima_fecha")
+        .eq("idempresa", empresaId)
+        .eq("activo", true)
+        .lt("proxima_fecha", hoyISO())
+      if (idsCerradas.length) q = q.not("etapa_id", "in", `(${idsCerradas.join(",")})`)
+      q = filtrarPorVendedor(q, ctx, "vendedor_id")
+      const { data } = await q.order("proxima_fecha").limit(20)
+      return (data ?? []).map((p) => ({
+        tipo: "seguimiento_vencido",
+        id: p.id,
+        fecha: p.proxima_fecha,
+        mensaje: `${p.razon_social}: seguimiento pendiente desde ${p.proxima_fecha}`,
+      }))
+    },
+  },
+
+  // Cotizaciones abiertas que vencen dentro del margen parametrizado.
+  cotizaciones: {
+    permisos: ["crm_cotizaciones"],
+    generar: async (ctx, empresaId) => {
+      const sb = await getSupabaseAdminAsSystem()
+      const dias = await leerParamNumber(PARAM.COTIZACION_ALERTA_VENCIMIENTO, empresaId, 3)
+      const hoy = hoyISO()
+      let q = sb
+        .from("crm_cotizaciones")
+        .select("id, numero, fecha_vencimiento, total")
+        .eq("idempresa", empresaId)
+        .in("estado", ["borrador", "enviada"])
+        .gte("fecha_vencimiento", hoy)
+        .lte("fecha_vencimiento", sumarDias(hoy, dias))
+      q = filtrarPorVendedor(q, ctx, "vendedor_id")
+      const { data } = await q.order("fecha_vencimiento").limit(20)
+      return (data ?? []).map((c) => ({
+        tipo: "por_vencer",
+        id: c.id,
+        fecha: c.fecha_vencimiento,
+        mensaje: `${c.numero} vence el ${c.fecha_vencimiento} · ${money(Number(c.total) || 0)}`,
+      }))
+    },
+  },
+
+  // Facturas vencidas con saldo.
+  cartera: {
+    permisos: ["crm_cartera", "crm_recaudos_aprobar"],
+    generar: async (ctx, empresaId) => {
+      const sb = await getSupabaseAdminAsSystem()
+      let q = sb
+        .from("crm_cartera_aging")
+        .select("id, cliente_nombre, numero_factura, dias_vencido, saldo")
+        .eq("idempresa", empresaId)
+        .gt("dias_vencido", 0)
+      q = filtrarPorVendedor(q, ctx, "vendedor_id")
+      const { data } = await q.order("dias_vencido", { ascending: false }).limit(20)
+      return (data ?? []).map((c) => ({
+        tipo: "vencida",
+        id: c.id,
+        mensaje: `${c.cliente_nombre ?? "Cliente"}${c.numero_factura ? ` · ${c.numero_factura}` : ""}: ${c.dias_vencido} días · ${money(Number(c.saldo) || 0)}`,
+      }))
+    },
+  },
+
+  // Pedidos que esperan la firma que este usuario puede dar.
+  autorizaciones: {
+    permisos: ["crm_autorizar_contabilidad", "crm_autorizar_gerencia"],
+    generar: async (ctx, empresaId) => {
+      const sb = await getSupabaseAdminAsSystem()
+      const cartera = tienePermiso(ctx, "crm_autorizar_contabilidad")
+      const gerencia = tienePermiso(ctx, "crm_autorizar_gerencia")
+      const { data } = await sb
+        .from("crm_pedidos")
+        .select("id, numero, total, auth_contabilidad_en, auth_gerencia_en, creado_por")
+        .eq("idempresa", empresaId)
+        .in("estado", ["pendiente_autorizacion", "autorizado_parcial", "pendiente_cartera", "pendiente_gerencia"])
+        .order("creado_en")
+        .limit(50)
+      return (data ?? [])
+        .filter((p) => p.creado_por !== ctx.nombre)
+        .filter((p) => (cartera && !p.auth_contabilidad_en) || (gerencia && !p.auth_gerencia_en))
+        .slice(0, 20)
+        .map((p) => ({
+          tipo: "firma",
+          id: p.id,
+          mensaje: `${p.numero} · ${money(Number(p.total) || 0)} espera tu firma`,
+        }))
+    },
+  },
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ alerta: string }> }) {
+  try {
+    const { alerta } = await params
+    const m = /^([a-z]+)-alerts$/.exec(alerta)
+    const dominio = m ? DOMINIOS[m[1]] : undefined
+    if (!dominio) return NextResponse.json({ error: "No existe" }, { status: 404 })
+
+    const ctx = await getContexto()
+    if (!ctx || !tienePermiso(ctx, ...dominio.permisos)) return vacio()
+
+    const pedida = Number(request.nextUrl.searchParams.get("empresaId"))
+    const empresaId = await empresaPermitida(ctx, Number.isFinite(pedida) && pedida > 0 ? pedida : null)
+
+    const alerts = await dominio.generar(ctx, empresaId)
+    return NextResponse.json({ alerts, count: alerts.length })
+  } catch (err) {
+    console.error("[crm-alerts]", err)
+    return vacio()
+  }
+}

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getContexto } from "@/lib/crm-auth"
 
 // Endpoint para subir PDFs generados por la app (ej. PDF de
 // Aprobacion de Turnos). Antes usaba `@vercel/blob`, que estaba
@@ -9,11 +10,22 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 // resto del proyecto. La carpeta destino llega como `folder` en el
 // FormData (ej. "aprobacionturnos") y, si no viene, cae a
 // "documentos".
+//
+// SEGURIDAD: el endpoint escribe con la llave de servicio en un bucket
+// PUBLICO. Sin sesion, cualquiera en internet podia subir archivos y obtener
+// una URL servida desde nuestro dominio. Y como `folder` llega del cliente,
+// un "../" o una ruta absoluta dejaba escribir en carpetas de otros modulos.
 export async function POST(request: NextRequest) {
   try {
+    const ctx = await getContexto()
+    if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+
     const formData = await request.formData()
     const file = formData.get("file") as File | null
-    const folder = (formData.get("folder") as string) || "documentos"
+    const folder = carpetaSegura(formData.get("folder"))
+    if (!folder) {
+      return NextResponse.json({ error: "Carpeta no válida" }, { status: 400 })
+    }
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
@@ -52,4 +64,20 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
+}
+
+/**
+ * Carpeta destino saneada, o null si no es aceptable.
+ *
+ * Solo segmentos de letras, numeros, guion y guion bajo separados por "/".
+ * Asi no cabe "..", ni una ruta absoluta, ni barras invertidas, ni segmentos
+ * vacios: lista blanca de caracteres en vez de buscar cada truco conocido.
+ */
+function carpetaSegura(valor: FormDataEntryValue | null): string | null {
+  const bruto = typeof valor === "string" ? valor.trim() : ""
+  if (!bruto) return "documentos"
+  if (bruto.startsWith("/") || bruto.includes("..")) return null
+  const segmentos = bruto.split("/")
+  if (!segmentos.every((s) => /^[A-Za-z0-9_-]+$/.test(s))) return null
+  return segmentos.join("/")
 }

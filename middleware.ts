@@ -19,6 +19,13 @@ import { NextResponse, type NextRequest } from "next/server"
  * responde "¿hay sesión?", no "¿puede ver esto?".
  */
 export async function middleware(request: NextRequest) {
+  // Los cron de Vercel no tienen sesion: se identifican con CRON_SECRET, que
+  // valida cada ruta de /api/cron/. Si pasaran por aqui, se redirigirian a
+  // /login y nunca correrian.
+  if (request.nextUrl.pathname.startsWith("/api/cron/")) {
+    return NextResponse.next({ request })
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(

@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getParamNumber } from "@/lib/crm-parametros-actions"
 import { PARAM } from "@/lib/crm-parametros"
 import { hoyISO, sumarDias, diasEntre } from "@/lib/crm-fechas"
+import { exigirPermiso, mensajeError } from "@/lib/crm-auth"
 import type { Oportunidad, TipoOportunidad } from "@/lib/crm-oportunidades"
 export type { Oportunidad, TipoOportunidad } from "@/lib/crm-oportunidades"
 
@@ -22,13 +23,14 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-oportunidades]", msg)
   return { success: false, error: msg }
 }
 
 export async function getOportunidades(empresaId = 1): Promise<ActionResult<Oportunidad[]>> {
   try {
+    const ctx = await exigirPermiso("getOportunidades", "crm_ia_oportunidades")
     const supabase = await getSupabaseAdmin()
     const hoy = hoyISO()
     const hace90 = sumarDias(hoy, -90)
@@ -46,12 +48,12 @@ export async function getOportunidades(empresaId = 1): Promise<ActionResult<Opor
 
       supabase
         .from("clientes")
-        .select("id, nombre, cupo_credito, segmento, bloqueado_cartera")
+        .select("id, nombre, cupo_credito, segmento, bloqueado_cartera, vendedor_asignado")
         .eq("id_empresa", empresaId),
 
       supabase
         .from("crm_prospectos")
-        .select("id, razon_social, valor_estimado, actualizado_en, etapa_id, crm_etapas(nombre, es_ganada, es_perdida)")
+        .select("id, razon_social, valor_estimado, actualizado_en, etapa_id, vendedor_id, crm_etapas(nombre, es_ganada, es_perdida)")
         .eq("idempresa", empresaId)
         .eq("activo", true),
 
@@ -255,12 +257,34 @@ export async function getOportunidades(empresaId = 1): Promise<ActionResult<Opor
       }
     }
 
+    // Un vendedor con alcance `propios` ve solo las oportunidades de sus
+    // clientes y sus prospectos. Las señales se calculan sobre toda la base
+    // (la venta cruzada necesita comparar contra el segmento completo); lo que
+    // se recorta es lo que se le muestra. Se filtra ANTES del top 50 para que
+    // el vendedor no reciba una lista vacia porque las 50 primeras eran ajenas.
+    let visibles = oportunidades
+    if (ctx.alcance === "propios") {
+      const clientesPropios = new Set(
+        clientes.filter((c: any) => c.vendedor_asignado === ctx.vendedorId).map((c: any) => c.id),
+      )
+      const prospectosPropios = new Set(
+        (prospectosRes.data ?? [])
+          .filter((p: any) => p.vendedor_id === ctx.vendedorId)
+          .map((p: any) => p.id),
+      )
+      visibles = oportunidades.filter((o) =>
+        o.clienteId != null
+          ? clientesPropios.has(o.clienteId)
+          : o.prospectoId != null && prospectosPropios.has(o.prospectoId),
+      )
+    }
+
     // Las más relevantes primero; a igual relevancia, las de mayor valor.
-    oportunidades.sort(
+    visibles.sort(
       (a, b) => b.relevancia - a.relevancia || (b.valorPotencial ?? 0) - (a.valorPotencial ?? 0),
     )
 
-    return { success: true, data: oportunidades.slice(0, 50) }
+    return { success: true, data: visibles.slice(0, 50) }
   } catch (err) {
     return fallo(err)
   }

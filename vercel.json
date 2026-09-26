@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/indicadores/snapshot",
-      "schedule": "0 6 1 * *"
-    },
-    {
-      "path": "/api/cron/anexos-pendientes",
-      "schedule": "0 13 * * *"
+      "path": "/api/cron/outbox",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

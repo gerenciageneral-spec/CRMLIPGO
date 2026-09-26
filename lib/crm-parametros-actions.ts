@@ -13,7 +13,15 @@
 // que no habria forma de coordinar entre instancias.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { PARAM_FALLBACK, type ParamKey, type CrmParametro } from "@/lib/crm-parametros"
+import {
+  PARAMS_SECRETOS, VALOR_SECRETO_DE_FABRICA,
+  type ParamKey, type CrmParametro,
+} from "@/lib/crm-parametros"
+import {
+  leerParam, leerParamNumber, leerParamBool, leerParams, invalidarParametros,
+} from "@/lib/crm-parametros-server"
+import { exigirPermiso, exigirSesion, mensajeError } from "@/lib/crm-auth"
+import { hoyISO } from "@/lib/crm-fechas"
 
 export interface ActionResult<T = unknown> {
   success: boolean
@@ -21,75 +29,51 @@ export interface ActionResult<T = unknown> {
   error?: string
 }
 
-const TTL_MS = 60_000
+// SECRETOS: estas funciones son invocables desde el navegador. Nunca devuelven
+// el valor de un parametro secreto (las claves de autorizacion). El codigo del
+// servidor que las necesita las lee con `leerParam` de crm-parametros-server.
 
-type Entrada = { valores: Map<string, string>; expira: number }
-const cache = new Map<number, Entrada>()
-
-/** Trae todos los parametros vigentes de la empresa, cacheados. */
-async function cargar(empresaId: number): Promise<Map<string, string>> {
-  const ahora = Date.now()
-  const vigente = cache.get(empresaId)
-  if (vigente && vigente.expira > ahora) return vigente.valores
-
-  try {
-    const supabase = await getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from("crm_parametros")
-      .select("clave, valor")
-      .eq("idempresa", empresaId)
-      .is("vigente_hasta", null)
-
-    if (error) throw error
-
-    const valores = new Map<string, string>()
-    for (const fila of data ?? []) valores.set(fila.clave, fila.valor)
-
-    cache.set(empresaId, { valores, expira: ahora + TTL_MS })
-    return valores
-  } catch (err) {
-    // Se devuelve lo cacheado aunque este vencido: un parametro algo viejo es
-    // mejor que tumbar la pantalla. Si no hay nada, manda el fallback.
-    console.error("[crm-parametros] no se pudo leer la tabla:", err)
-    return vigente?.valores ?? new Map()
+/** Oculta el valor de un parametro secreto antes de devolverlo. */
+function enmascarar(p: CrmParametro): CrmParametro {
+  if (!PARAMS_SECRETOS.has(p.clave)) return p
+  return {
+    ...p,
+    valor: "",
+    secreto: { configurado: !!p.valor && p.valor !== VALOR_SECRETO_DE_FABRICA },
   }
 }
 
 /** Valor crudo (texto) de un parametro. */
 export async function getParam(clave: ParamKey, empresaId = 1): Promise<string> {
-  const valores = await cargar(empresaId)
-  return valores.get(clave) ?? PARAM_FALLBACK[clave] ?? ""
+  await exigirSesion()
+  if (PARAMS_SECRETOS.has(clave)) return ""
+  return leerParam(clave, empresaId)
 }
 
 /** Parametro numerico. `fallback` solo aplica si el valor no es un numero. */
 export async function getParamNumber(clave: ParamKey, empresaId = 1, fallback?: number): Promise<number> {
-  const crudo = await getParam(clave, empresaId)
-  const n = Number(crudo)
-  if (Number.isFinite(n)) return n
-  if (typeof fallback === "number") return fallback
-  const porDefecto = Number(PARAM_FALLBACK[clave])
-  return Number.isFinite(porDefecto) ? porDefecto : 0
+  await exigirSesion()
+  return leerParamNumber(clave, empresaId, fallback)
 }
 
 /** Parametro booleano. Solo "true" (sin distinguir mayusculas) es verdadero. */
 export async function getParamBool(clave: ParamKey, empresaId = 1): Promise<boolean> {
-  const crudo = await getParam(clave, empresaId)
-  return String(crudo).trim().toLowerCase() === "true"
+  await exigirSesion()
+  return leerParamBool(clave, empresaId)
 }
 
 /** Varios parametros en UNA sola lectura. Preferir esto en cualquier calculo
  *  que necesite mas de uno (el de un pedido usa IVA, tope de descuento y
  *  validacion de cupo a la vez). */
 export async function getParams(claves: ParamKey[], empresaId = 1): Promise<Record<string, string>> {
-  const valores = await cargar(empresaId)
-  const salida: Record<string, string> = {}
-  for (const clave of claves) salida[clave] = valores.get(clave) ?? PARAM_FALLBACK[clave] ?? ""
-  return salida
+  await exigirSesion()
+  return leerParams(claves.filter((c) => !PARAMS_SECRETOS.has(c)), empresaId)
 }
 
 /** Todos los parametros con sus metadatos, para la pantalla de Parametrizacion. */
 export async function listarParametros(empresaId = 1): Promise<ActionResult<CrmParametro[]>> {
   try {
+    await exigirPermiso("listarParametros", "crm_parametros")
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_parametros")
@@ -100,9 +84,9 @@ export async function listarParametros(empresaId = 1): Promise<ActionResult<CrmP
       .order("etiqueta")
 
     if (error) return { success: false, error: error.message }
-    return { success: true, data: (data ?? []) as CrmParametro[] }
+    return { success: true, data: ((data ?? []) as CrmParametro[]).map(enmascarar) }
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Error desconocido" }
+    return { success: false, error: mensajeError(err) }
   }
 }
 
@@ -117,10 +101,14 @@ export async function listarParametros(empresaId = 1): Promise<ActionResult<CrmP
 export async function setParam(
   clave: ParamKey,
   valor: string,
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<CrmParametro>> {
   try {
+    // Quien cambia sale de la sesion. El argumento se conserva por
+    // compatibilidad con los llamados existentes y se ignora.
+    const ctx = await exigirPermiso("setParam", "crm_parametros")
+    const usuario = ctx.nombre
     const supabase = await getSupabaseAdmin()
 
     const { data: actual, error: errLectura } = await supabase
@@ -149,10 +137,12 @@ export async function setParam(
     }
 
     if (actual.valor === valor) {
-      return { success: true, data: actual as CrmParametro } // nada que hacer
+      return { success: true, data: enmascarar(actual as CrmParametro) } // nada que hacer
     }
 
-    const hoy = new Date().toISOString().slice(0, 10)
+    // Fecha de Bogota, no UTC: con toISOString(), un cambio hecho despues de
+    // las 7 p. m. quedaba vigente desde el dia siguiente.
+    const hoy = hoyISO()
 
     // Si ya se cambio hoy, se reemplaza la fila del dia en vez de cerrarla:
     // el indice unico (idempresa, clave, vigente_desde) no admite dos filas
@@ -166,8 +156,8 @@ export async function setParam(
         .single()
 
       if (error) return { success: false, error: error.message }
-      cache.delete(empresaId)
-      return { success: true, data: data as CrmParametro }
+      invalidarParametros(empresaId)
+      return { success: true, data: enmascarar(data as CrmParametro) }
     }
 
     // Cerrar el vigente...
@@ -206,16 +196,17 @@ export async function setParam(
       return { success: false, error: error.message }
     }
 
-    cache.delete(empresaId)
-    return { success: true, data: data as CrmParametro }
+    invalidarParametros(empresaId)
+    return { success: true, data: enmascarar(data as CrmParametro) }
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Error desconocido" }
+    return { success: false, error: mensajeError(err) }
   }
 }
 
 /** Historial de un parametro, para responder "que IVA regia en marzo". */
 export async function historialParametro(clave: ParamKey, empresaId = 1): Promise<ActionResult<CrmParametro[]>> {
   try {
+    await exigirPermiso("historialParametro", "crm_parametros")
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_parametros")
@@ -225,14 +216,14 @@ export async function historialParametro(clave: ParamKey, empresaId = 1): Promis
       .order("vigente_desde", { ascending: false })
 
     if (error) return { success: false, error: error.message }
-    return { success: true, data: (data ?? []) as CrmParametro[] }
+    return { success: true, data: ((data ?? []) as CrmParametro[]).map(enmascarar) }
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : "Error desconocido" }
+    return { success: false, error: mensajeError(err) }
   }
 }
 
 /** Vacia la cache. La usan las pruebas y el guardado de parametros. */
 export async function invalidarCacheParametros(empresaId?: number): Promise<void> {
-  if (empresaId == null) cache.clear()
-  else cache.delete(empresaId)
+  await exigirSesion()
+  invalidarParametros(empresaId)
 }

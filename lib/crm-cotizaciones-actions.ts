@@ -7,6 +7,10 @@ import { getParamNumber, getParamBool } from "@/lib/crm-parametros-actions"
 import { PARAM } from "@/lib/crm-parametros"
 import { hoyISO, sumarDias } from "@/lib/crm-fechas"
 import { calcularTotales, calcularLinea } from "@/lib/crm-cotizaciones"
+import {
+  exigirPermiso, exigirSesion, filtrarPorVendedor, asegurarClienteVisible, mensajeError,
+} from "@/lib/crm-auth"
+import { registrarEvento } from "@/lib/crm-eventos"
 import type {
   Cotizacion, CotizacionConDetalle, LineaCotizacion, NuevaCotizacion, EstadoCotizacion,
 } from "@/lib/crm-cotizaciones"
@@ -18,7 +22,7 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-cotizaciones]", msg)
   return { success: false, error: msg }
 }
@@ -30,8 +34,11 @@ export async function getCotizaciones(
   filtros?: { estado?: EstadoCotizacion; clienteId?: number; vendedorId?: number },
 ): Promise<ActionResult<CotizacionConDetalle[]>> {
   try {
+    const ctx = await exigirPermiso("getCotizaciones", "crm_cotizaciones", "crm_pedidos")
     const supabase = await getSupabaseAdmin()
     let q = supabase.from("crm_cotizaciones").select("*").eq("idempresa", empresaId)
+    // Un vendedor ve solo sus cotizaciones, aunque pida las de otro en el filtro.
+    q = filtrarPorVendedor(q, ctx, "vendedor_id")
 
     if (filtros?.estado) q = q.eq("estado", filtros.estado)
     if (filtros?.clienteId) q = q.eq("cliente_id", filtros.clienteId)
@@ -74,6 +81,22 @@ export async function getCotizaciones(
 
 export async function getCotizacion(id: number, empresaId = 1): Promise<ActionResult<CotizacionConDetalle>> {
   try {
+    const ctx = await exigirPermiso("getCotizacion", "crm_cotizaciones", "crm_pedidos")
+    const res = await getCotizacionInterna(id, empresaId)
+    // La de otro vendedor se trata como inexistente: decir "no tienes
+    // permiso" confirmaria que ese id existe.
+    if (res.success && res.data && ctx.alcance === "propios" && res.data.vendedor_id !== ctx.vendedorId) {
+      return { success: false, error: "No encontrado" }
+    }
+    return res
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/** Lectura sin validacion de permisos, para quien ya valido el suyo. */
+async function getCotizacionInterna(id: number, empresaId: number): Promise<ActionResult<CotizacionConDetalle>> {
+  try {
     const supabase = await getSupabaseAdmin()
 
     const [cabRes, detRes] = await Promise.all([
@@ -97,13 +120,20 @@ export async function getCotizacion(id: number, empresaId = 1): Promise<ActionRe
 
 export async function crearCotizacion(
   entrada: NuevaCotizacion,
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<Cotizacion>> {
   try {
+    // Quien crea sale de la sesion; el argumento se conserva por
+    // compatibilidad con los llamados existentes y se ignora.
+    const ctx = await exigirPermiso("crearCotizacion", "crm_cotizaciones", "crm_pedidos")
+    const usuario = ctx.nombre
+
     if (!entrada.cliente_id && !entrada.prospecto_id) {
       return { success: false, error: "La cotización debe ir dirigida a un cliente o a un prospecto" }
     }
+    // Un vendedor no cotiza a un cliente ajeno adivinando el id.
+    if (entrada.cliente_id) await asegurarClienteVisible(ctx, entrada.cliente_id)
 
     const lineas = (entrada.lineas ?? []).filter((l) => l.producto_nombre?.trim() && Number(l.cantidad) > 0)
     if (!lineas.length) {
@@ -139,7 +169,13 @@ export async function crearCotizacion(
         prospecto_id: entrada.prospecto_id ?? null,
         cliente_id: entrada.cliente_id ?? null,
         bodega_id: entrada.bodega_id ?? null,
-        vendedor_id: entrada.vendedor_id ?? null,
+        // El formulario no manda vendedor: sin este default toda cotizacion
+        // quedaba con vendedor NULL y el vendedor filtrado nunca veia las suyas.
+        // Un vendedor solo cotiza a su nombre: si su alcance es "propios", el
+        // vendedor que venga en la entrada se ignora. Solo quien ve todo
+        // (cartera, gerencia) puede registrar una cotizacion por otro.
+        vendedor_id:
+          ctx.alcance === "propios" ? ctx.vendedorId : (entrada.vendedor_id ?? ctx.vendedorId ?? null),
         tipo_venta: entrada.tipo_venta ?? "cotizacion",
         forma_pago: entrada.forma_pago ?? "contado",
         dias_credito: entrada.dias_credito ?? 0,
@@ -206,7 +242,15 @@ export async function cambiarEstadoCotizacion(
   motivo?: string,
 ): Promise<ActionResult<Cotizacion>> {
   try {
+    const ctx = await exigirPermiso("cambiarEstadoCotizacion", "crm_cotizaciones", "crm_pedidos")
     const supabase = await getSupabaseAdmin()
+
+    // Un vendedor no cambia el estado de la cotizacion de otro.
+    if (ctx.alcance === "propios") {
+      const { data: actual } = await supabase
+        .from("crm_cotizaciones").select("vendedor_id").eq("id", id).eq("idempresa", empresaId).maybeSingle()
+      if (!actual || actual.vendedor_id !== ctx.vendedorId) return { success: false, error: "No encontrado" }
+    }
 
     const cambios: Record<string, unknown> = { estado }
     if (estado === "rechazada" && motivo) cambios.motivo_rechazo = motivo
@@ -237,17 +281,23 @@ export async function cambiarEstadoCotizacion(
  */
 export async function convertirEnPedido(
   cotizacionId: number,
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<{ pedidoId: number; numero: string }>> {
   try {
+    // Quien convierte sale de la sesion, no del argumento.
+    const ctx = await exigirPermiso("convertirEnPedido", "crm_pedidos", "crm_cotizaciones")
+    const usuario = ctx.nombre
     const supabase = await getSupabaseAdmin()
 
-    const cotRes = await getCotizacion(cotizacionId, empresaId)
+    const cotRes = await getCotizacionInterna(cotizacionId, empresaId)
     if (!cotRes.success || !cotRes.data) {
       return { success: false, error: cotRes.error ?? "La cotización no existe" }
     }
     const cot = cotRes.data
+    if (ctx.alcance === "propios" && cot.vendedor_id !== ctx.vendedorId) {
+      return { success: false, error: "No encontrado" }
+    }
 
     if (cot.crm_pedido_id) {
       return { success: false, error: `Esta cotización ya generó el pedido ${cot.crm_pedido_id}` }
@@ -261,6 +311,7 @@ export async function convertirEnPedido(
         error: "La cotización es de un prospecto. Conviértelo en cliente antes de generar el pedido.",
       }
     }
+    await asegurarClienteVisible(ctx, cot.cliente_id)
 
     // La vigencia se comprueba al convertir, no al consultar: una cotizacion
     // vencida ya no obliga a nadie a ese precio.
@@ -276,7 +327,8 @@ export async function convertirEnPedido(
     if (cot.forma_pago === "credito") {
       const validar = await getParamBool(PARAM.CREDITO_VALIDAR_CUPO, empresaId)
       if (validar) {
-        const chequeo = await verificarCupo(cot.cliente_id, cot.total, empresaId)
+        // Version interna: el permiso ya se valido al entrar.
+        const chequeo = await verificarCupoInterno(cot.cliente_id, cot.total, empresaId)
         if (!chequeo.ok) return { success: false, error: chequeo.motivo }
       }
     }
@@ -287,8 +339,12 @@ export async function convertirEnPedido(
         idempresa: empresaId,
         cotizacion_id: cot.id,
         cliente_id: cot.cliente_id,
+        // Vendedor y bodega viajan con la cotizacion: sin vendedor el pedido
+        // no aparece al vendedor filtrado ni genera su comision. Las
+        // cotizaciones viejas nacieron sin vendedor; ahi se toma el de quien
+        // convierte, si lo tiene.
         bodega_id: cot.bodega_id,
-        vendedor_id: cot.vendedor_id,
+        vendedor_id: cot.vendedor_id ?? ctx.vendedorId ?? null,
         fecha: hoyISO(),
         forma_pago: cot.forma_pago,
         dias_credito: cot.dias_credito,
@@ -338,6 +394,19 @@ export async function convertirEnPedido(
       .update({ estado: "convertida", crm_pedido_id: pedido.id })
       .eq("id", cotizacionId)
 
+    await registrarEvento({
+      empresaId,
+      entidad: "pedido",
+      entidadId: pedido.id,
+      tipo: "creado",
+      estadoDesde: null,
+      estadoHasta: "pendiente_autorizacion",
+      usuarioId: ctx.userId,
+      usuarioNombre: ctx.nombre,
+      nota: null,
+      datos: { cotizacion_id: cot.id, cotizacion_estado: cot.estado },
+    })
+
     return { success: true, data: { pedidoId: pedido.id, numero: pedido.numero } }
   } catch (err) {
     return fallo(err)
@@ -354,7 +423,24 @@ export async function verificarCupo(
   clienteId: number,
   montoNuevo: number,
   empresaId = 1,
-): Promise<{ ok: boolean; motivo?: string; cupo?: number; usado?: number; disponible?: number }> {
+): Promise<ResultadoCupo> {
+  try {
+    await exigirSesion()
+    return await verificarCupoInterno(clienteId, montoNuevo, empresaId)
+  } catch (err) {
+    return { ok: false, motivo: mensajeError(err, "Error al verificar el cupo") }
+  }
+}
+
+type ResultadoCupo = { ok: boolean; motivo?: string; cupo?: number; usado?: number; disponible?: number }
+
+/** Cuerpo de verificarCupo sin validar sesion: lo usa convertirEnPedido, que ya
+ *  valido la suya. */
+async function verificarCupoInterno(
+  clienteId: number,
+  montoNuevo: number,
+  empresaId: number,
+): Promise<ResultadoCupo> {
   try {
     const supabase = await getSupabaseAdmin()
 
@@ -413,7 +499,7 @@ export async function verificarCupo(
 
     return { ok: true, cupo, usado, disponible }
   } catch (err) {
-    return { ok: false, motivo: err instanceof Error ? err.message : "Error al verificar el cupo" }
+    return { ok: false, motivo: mensajeError(err, "Error al verificar el cupo") }
   }
 }
 
@@ -425,6 +511,8 @@ export async function verificarCupo(
  */
 export async function vencerCotizaciones(empresaId = 1): Promise<ActionResult<number>> {
   try {
+    // Mantenimiento que dispara el panel al abrirse: basta con tener sesion.
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_cotizaciones")

@@ -8,8 +8,11 @@
 // registrar que se agendo una visita y el cliente no asistio.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getCurrentUser } from "@/lib/auth-actions"
 import { hoyISO, sumarDias } from "@/lib/crm-fechas"
+import {
+  exigirPermiso, asegurarClienteVisible, mensajeError,
+  type ContextoCrm,
+} from "@/lib/crm-auth"
 import type { EstadoCita, Cita } from "@/lib/crm-agenda"
 // Se reexportan para no romper a quien ya los importaba desde aqui.
 export type { EstadoCita, Cita } from "@/lib/crm-agenda"
@@ -21,21 +24,66 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-agenda]", msg)
   return { success: false, error: msg }
 }
 
-export async function getCitas(
-  empresaId = 1,
-  filtros?: {
-    desde?: string
-    hasta?: string
-    vendedorId?: number
-    /** true = solo las del usuario en sesión. Para "Mi agenda". */
-    soloMias?: boolean
-    estado?: EstadoCita
-  },
+// La agenda la usan el modulo propio y la ficha del prospecto (proximo
+// contacto): cualquiera de los dos permisos basta.
+const PERM_AGENDA = ["crm_agenda", "crm_prospectos"] as const
+
+type FiltrosCitas = {
+  desde?: string
+  hasta?: string
+  vendedorId?: number
+  /** true = solo las del usuario en sesión. Para "Mi agenda". */
+  soloMias?: boolean
+  estado?: EstadoCita
+}
+
+/**
+ * Alcance de la agenda para un vendedor: sus citas por vendedor_id Y las que
+ * tiene asignadas como usuario.
+ *
+ * No basta `filtrarPorVendedor`: hay citas con vendedor_id vacio (las creadas
+ * antes de que se asignara por defecto) cuyo dueno real es `usuario_asignado`.
+ * Filtrar solo por vendedor se las esconderia a quien las tiene que cumplir.
+ */
+function alcanceCitas<Q extends { or: (filtro: string) => Q }>(q: Q, ctx: ContextoCrm): Q {
+  if (ctx.alcance === "propios" && ctx.vendedorId != null) {
+    return q.or(`vendedor_id.eq.${ctx.vendedorId},usuario_asignado.eq.${ctx.userId}`)
+  }
+  return q
+}
+
+/**
+ * La cita, si existe y el usuario la puede ver; null si no.
+ *
+ * Toda escritura pasa por aqui: un vendedor no debe cumplir, reprogramar ni
+ * cancelar la cita de otro adivinando su id.
+ */
+async function buscarCita(
+  supabase: Awaited<ReturnType<typeof getSupabaseAdmin>>,
+  ctx: ContextoCrm,
+  citaId: number,
+  empresaId: number,
+) {
+  let q = supabase.from("crm_agenda").select("*").eq("id", citaId).eq("idempresa", empresaId)
+  q = alcanceCitas(q, ctx)
+  const { data } = await q.maybeSingle()
+  return data
+}
+
+/**
+ * Lectura de citas sin validar permiso. La validacion la hace quien la llama:
+ * getAgendaDelDia la reutiliza, y si llamara a getCitas el permiso se
+ * validaria (y se registraria en la bitacora) dos veces.
+ */
+async function leerCitas(
+  ctx: ContextoCrm,
+  empresaId: number,
+  filtros?: FiltrosCitas,
 ): Promise<ActionResult<Cita[]>> {
   try {
     const supabase = await getSupabaseAdmin()
@@ -46,10 +94,10 @@ export async function getCitas(
     if (filtros?.vendedorId) q = q.eq("vendedor_id", filtros.vendedorId)
     if (filtros?.estado) q = q.eq("estado", filtros.estado)
 
-    if (filtros?.soloMias) {
-      const user = await getCurrentUser()
-      if (user) q = q.eq("usuario_asignado", user.id)
-    }
+    if (filtros?.soloMias) q = q.eq("usuario_asignado", ctx.userId)
+
+    // El vendedor ve solo su agenda, pida el filtro que pida.
+    q = alcanceCitas(q, ctx)
 
     const { data, error } = await q
       .order("fecha")
@@ -90,6 +138,18 @@ export async function getCitas(
   }
 }
 
+export async function getCitas(
+  empresaId = 1,
+  filtros?: FiltrosCitas,
+): Promise<ActionResult<Cita[]>> {
+  try {
+    const ctx = await exigirPermiso("getCitas", ...PERM_AGENDA)
+    return await leerCitas(ctx, empresaId, filtros)
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
 export async function crearCita(
   cita: {
     titulo: string
@@ -104,15 +164,17 @@ export async function crearCita(
     direccion?: string | null
     recordatorio_dias?: number
   },
-  usuario: string,
+  // Se ignora: quien crea sale de la sesion, no de lo que mande el navegador.
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<Cita>> {
   try {
+    const ctx = await exigirPermiso("crearCita", ...PERM_AGENDA)
     if (!cita.titulo?.trim()) return { success: false, error: "La cita necesita un título" }
     if (!cita.fecha) return { success: false, error: "Falta la fecha" }
+    if (cita.cliente_id) await asegurarClienteVisible(ctx, cita.cliente_id)
 
     const supabase = await getSupabaseAdmin()
-    const user = await getCurrentUser()
 
     const { data, error } = await supabase
       .from("crm_agenda")
@@ -126,13 +188,15 @@ export async function crearCita(
         hora_fin: cita.hora_fin || null,
         prospecto_id: cita.prospecto_id ?? null,
         cliente_id: cita.cliente_id ?? null,
-        vendedor_id: cita.vendedor_id ?? null,
+        // Sin vendedor explicito, la cita es del vendedor que la crea: si no,
+        // quedaria fuera de su propia agenda.
+        vendedor_id: cita.vendedor_id ?? ctx.vendedorId,
         // Se asigna a quien la crea: es el caso normal, y si hay que
         // reasignarla se hace después.
-        usuario_asignado: user?.id ?? null,
+        usuario_asignado: ctx.userId,
         direccion: cita.direccion?.trim() || null,
         recordatorio_dias: cita.recordatorio_dias ?? 1,
-        creado_por: usuario,
+        creado_por: ctx.nombre,
       })
       .select()
       .single()
@@ -153,18 +217,15 @@ export async function crearCita(
 export async function cumplirCita(
   citaId: number,
   detalle: { resultado?: string; notas?: string; latitud?: number; longitud?: number; precision_m?: number },
-  usuario: string,
+  // Se ignora: la bitacora firma con el usuario de la sesion.
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<Cita>> {
   try {
+    const ctx = await exigirPermiso("cumplirCita", ...PERM_AGENDA)
     const supabase = await getSupabaseAdmin()
 
-    const { data: cita } = await supabase
-      .from("crm_agenda")
-      .select("*")
-      .eq("id", citaId)
-      .eq("idempresa", empresaId)
-      .maybeSingle()
+    const cita = await buscarCita(supabase, ctx, citaId, empresaId)
 
     if (!cita) return { success: false, error: "La cita no existe" }
 
@@ -183,7 +244,7 @@ export async function cumplirCita(
         longitud: detalle.longitud ?? null,
         gps_precision_m: detalle.precision_m ?? null,
         vendedor_id: cita.vendedor_id,
-        usuario,
+        usuario: ctx.nombre,
       })
       .select()
       .single()
@@ -223,18 +284,15 @@ export async function reprogramarCita(
   citaId: number,
   nuevaFecha: string,
   motivo: string,
-  usuario: string,
+  // Se ignora: quien reprograma sale de la sesion.
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<Cita>> {
   try {
+    const ctx = await exigirPermiso("reprogramarCita", ...PERM_AGENDA)
     const supabase = await getSupabaseAdmin()
 
-    const { data: original } = await supabase
-      .from("crm_agenda")
-      .select("*")
-      .eq("id", citaId)
-      .eq("idempresa", empresaId)
-      .maybeSingle()
+    const original = await buscarCita(supabase, ctx, citaId, empresaId)
 
     if (!original) return { success: false, error: "La cita no existe" }
 
@@ -254,7 +312,7 @@ export async function reprogramarCita(
         fecha: nuevaFecha,
         estado: "pendiente",
         actividad_id: null,
-        creado_por: usuario,
+        creado_por: ctx.nombre,
       })
       .select()
       .single()
@@ -272,7 +330,11 @@ export async function cancelarCita(
   empresaId = 1,
 ): Promise<ActionResult<null>> {
   try {
+    const ctx = await exigirPermiso("cancelarCita", ...PERM_AGENDA)
     const supabase = await getSupabaseAdmin()
+    if (!(await buscarCita(supabase, ctx, citaId, empresaId))) {
+      return { success: false, error: "La cita no existe" }
+    }
     const { error } = await supabase
       .from("crm_agenda")
       .update({ estado: "cancelada", descripcion: motivo })
@@ -297,10 +359,11 @@ export async function getAgendaDelDia(
   soloMias = true,
 ): Promise<ActionResult<{ vencidas: Cita[]; hoy: Cita[]; manana: Cita[]; proximas: Cita[] }>> {
   try {
+    const ctx = await exigirPermiso("getAgendaDelDia", ...PERM_AGENDA)
     const hoy = hoyISO()
     const manana = sumarDias(hoy, 1)
 
-    const res = await getCitas(empresaId, {
+    const res = await leerCitas(ctx, empresaId, {
       hasta: sumarDias(hoy, 7),
       estado: "pendiente",
       soloMias,

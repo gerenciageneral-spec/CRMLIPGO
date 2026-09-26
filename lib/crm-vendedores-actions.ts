@@ -9,6 +9,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { esActivo } from "@/lib/crm-catalogos"
+import { exigirPermiso, mensajeError } from "@/lib/crm-auth"
 
 export interface ActionResult<T = unknown> {
   success: boolean
@@ -54,7 +55,7 @@ export interface VendedorCompleto extends VendedorDetalle {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-vendedores]", msg)
   return { success: false, error: msg }
 }
@@ -64,6 +65,7 @@ export async function getVendedoresCompletos(
   conDesempeno = true,
 ): Promise<ActionResult<VendedorCompleto[]>> {
   try {
+    const ctx = await exigirPermiso("getVendedoresCompletos", "crm_vendedores", "crm_dashboard")
     const supabase = await getSupabaseAdmin()
 
     const [vendRes, detRes] = await Promise.all([
@@ -102,6 +104,13 @@ export async function getVendedoresCompletos(
           activo: d?.activo ?? true,
         }
       })
+
+    // Un vendedor con alcance `propios` ve solo su fila: la meta, la comision
+    // y la cartera de sus compañeros no son asunto suyo. Se filtra ANTES de
+    // calcular el desempeño para no consultar lo que se va a descartar.
+    if (ctx.alcance === "propios") {
+      vendedores = vendedores.filter((v) => v.vendedor_id === ctx.vendedorId)
+    }
 
     if (conDesempeno && vendedores.length) {
       vendedores = await agregarDesempeno(vendedores, empresaId)
@@ -187,6 +196,9 @@ export async function guardarDetalleVendedor(
   empresaId = 1,
 ): Promise<ActionResult<VendedorDetalle>> {
   try {
+    // Meta, comision y usuario vinculado: quien los edita decide cuanto gana
+    // el vendedor y que ve. No puede hacerlo el propio vendedor.
+    await exigirPermiso("guardarDetalleVendedor", "crm_vendedores")
     const supabase = await getSupabaseAdmin()
 
     // Upsert: la fila puede no existir si el vendedor se creó en el sistema
@@ -220,6 +232,7 @@ export async function getUsuariosDisponibles(): Promise<
   ActionResult<{ id: string; usuario: string }[]>
 > {
   try {
+    await exigirPermiso("getUsuariosDisponibles", "crm_vendedores", "crm_usuarios")
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("profiles")

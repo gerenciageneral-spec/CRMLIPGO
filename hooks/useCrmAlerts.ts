@@ -39,13 +39,14 @@ const REFRESH_MS = 60_000
 
 /**
  * @param endpoint  nombre del dominio, p.ej. "cartera" -> /api/crm/cartera-alerts
- * @param permiso   columna de permisos_usuarios que habilita la alerta
+ * @param permiso   columna(s) de permisos_usuarios que habilitan la alerta;
+ *                  con varias, basta con tener una
  * @param empresaId empresa activa del selector global
  * @param userId    profiles.id del usuario en sesion
  */
 export function useCrmAlerts<T extends CrmAlerta = CrmAlerta>(
   endpoint: string,
-  permiso: string,
+  permiso: string | string[],
   empresaId: number | null,
   userId?: string,
 ): UseCrmAlertsResult<T> {
@@ -69,7 +70,9 @@ export function useCrmAlerts<T extends CrmAlerta = CrmAlerta>(
         const permisos = await getUserPermissions(userId)
         // El doble casting es necesario: UserPermissions es una interfaz de
         // columnas concretas y aqui el permiso llega como string en runtime.
-        if (!permisos || (permisos as unknown as Record<string, unknown>)[permiso] !== true) {
+        const lista = Array.isArray(permiso) ? permiso : [permiso]
+        const mapa = permisos as unknown as Record<string, unknown> | null
+        if (!mapa || !lista.some((k) => mapa[k] === true)) {
           if (!cancelado) {
             setHasPermission(false)
             setLoading(false)
@@ -105,7 +108,10 @@ export function useCrmAlerts<T extends CrmAlerta = CrmAlerta>(
       cancelado = true // evita setState sobre un componente ya desmontado
       clearInterval(id)
     }
-  }, [endpoint, permiso, empresaId, userId])
+    // Se compara el permiso como texto: un arreglo literal es un objeto nuevo
+    // en cada render y re-dispararia el efecto sin parar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint, Array.isArray(permiso) ? permiso.join("|") : permiso, empresaId, userId])
 
   return { alerts, count, loading, hasPermission }
 }

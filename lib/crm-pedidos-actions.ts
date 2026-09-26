@@ -7,11 +7,15 @@
 // esta pensado para que eso no pueda ocurrir por accidente.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getCurrentUser, getUserProfile } from "@/lib/auth-actions"
-import { getUserPermissions } from "@/lib/permissions-actions"
-import { getParam, getParamBool } from "@/lib/crm-parametros-actions"
-import { PARAM } from "@/lib/crm-parametros"
+import { getParamBool } from "@/lib/crm-parametros-actions"
+import { leerParam } from "@/lib/crm-parametros-server"
+import { PARAM, VALOR_SECRETO_DE_FABRICA } from "@/lib/crm-parametros"
 import { hoyISO, sumarDias } from "@/lib/crm-fechas"
+import {
+  exigirPermiso, tienePermiso, filtrarPorVendedor, asegurarClienteVisible, mensajeError,
+  type ContextoCrm,
+} from "@/lib/crm-auth"
+import { registrarEvento } from "@/lib/crm-eventos"
 import {
   puedeFirmar, PERMISO_POR_ROL, ROL_LABEL,
   type Pedido, type PedidoConDetalle, type LineaPedido,
@@ -25,7 +29,7 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-pedidos]", msg)
   return { success: false, error: msg }
 }
@@ -37,8 +41,31 @@ export async function getPedidos(
   filtros?: { estado?: EstadoPedido; clienteId?: number; soloPendientes?: boolean },
 ): Promise<ActionResult<PedidoConDetalle[]>> {
   try {
+    const ctx = await exigirPermiso(
+      "getPedidos",
+      "crm_pedidos", "crm_autorizar_contabilidad", "crm_autorizar_gerencia",
+    )
+    return await getPedidosInterno(empresaId, filtros, ctx)
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/**
+ * Consulta de pedidos sin validacion de permisos.
+ *
+ * @param ctx si viene, se filtra por el vendedor del usuario. La bandeja de
+ *   firmas lo omite: quien autoriza firma pedidos de todos los vendedores.
+ */
+async function getPedidosInterno(
+  empresaId: number,
+  filtros: { estado?: EstadoPedido; clienteId?: number; soloPendientes?: boolean } | undefined,
+  ctx: ContextoCrm | null,
+): Promise<ActionResult<PedidoConDetalle[]>> {
+  try {
     const supabase = await getSupabaseAdmin()
     let q = supabase.from("crm_pedidos").select("*").eq("idempresa", empresaId)
+    if (ctx) q = filtrarPorVendedor(q, ctx, "vendedor_id")
 
     if (filtros?.estado) q = q.eq("estado", filtros.estado)
     if (filtros?.clienteId) q = q.eq("cliente_id", filtros.clienteId)
@@ -67,6 +94,27 @@ export async function getPedidos(
 
 export async function getPedido(id: number, empresaId = 1): Promise<ActionResult<PedidoConDetalle>> {
   try {
+    const ctx = await exigirPermiso(
+      "getPedido",
+      "crm_pedidos", "crm_autorizar_contabilidad", "crm_autorizar_gerencia",
+    )
+    const res = await getPedidoInterno(id, empresaId)
+    // El pedido de otro vendedor se trata como inexistente: decir "no tienes
+    // permiso" confirmaria que ese id existe.
+    if (res.success && res.data && ctx.alcance === "propios" && res.data.vendedor_id !== ctx.vendedorId) {
+      return { success: false, error: "No encontrado" }
+    }
+    return res
+  } catch (err) {
+    return fallo(err)
+  }
+}
+
+/** Lectura de un pedido sin validacion de permisos. La usan las acciones de
+ *  firma y envio, que ya validaron el suyo: quien autoriza firma pedidos de
+ *  cualquier vendedor. */
+async function getPedidoInterno(id: number, empresaId: number): Promise<ActionResult<PedidoConDetalle>> {
+  try {
     const supabase = await getSupabaseAdmin()
 
     const [cabRes, detRes] = await Promise.all([
@@ -94,7 +142,18 @@ export async function getHistorialAutorizaciones(
   pedidoId: number,
 ): Promise<ActionResult<EventoAutorizacion[]>> {
   try {
+    const ctx = await exigirPermiso(
+      "getHistorialAutorizaciones",
+      "crm_pedidos", "crm_autorizar_contabilidad", "crm_autorizar_gerencia",
+    )
     const supabase = await getSupabaseAdmin()
+
+    // La bitacora no guarda el vendedor: se mira en el pedido.
+    if (ctx.alcance === "propios") {
+      const { data: ped } = await supabase
+        .from("crm_pedidos").select("vendedor_id").eq("id", pedidoId).maybeSingle()
+      if (!ped || ped.vendedor_id !== ctx.vendedorId) return { success: false, error: "No encontrado" }
+    }
     const { data, error } = await supabase
       .from("crm_autorizaciones_log")
       .select("*")
@@ -137,42 +196,44 @@ export async function autorizarPedido(
   empresaId = 1,
 ): Promise<ActionResult<Pedido>> {
   try {
-    const supabase = await getSupabaseAdmin()
-
     // --- Identidad -------------------------------------------------------
-    const user = await getCurrentUser()
-    if (!user) return { success: false, error: "Sesión no válida" }
-
-    const perfil = await getUserProfile(user.id)
-    const nombreUsuario = perfil?.usuario ?? user.email ?? "desconocido"
+    const ctx = await exigirPermiso("autorizarPedido", PERMISO_POR_ROL[rol])
+    const supabase = await getSupabaseAdmin()
+    const userId = ctx.userId
+    const nombreUsuario = ctx.nombre
 
     // --- Control 1: permiso ---------------------------------------------
-    const permisos = await getUserPermissions(user.id)
-    if (!permisos || permisos[PERMISO_POR_ROL[rol]] !== true) {
+    // Se bloquea aqui aunque seguridad.modo este en "log": firmar sin el
+    // permiso nunca estuvo permitido, y el modo gradual no debe abrirlo.
+    if (!tienePermiso(ctx, PERMISO_POR_ROL[rol])) {
       return { success: false, error: `No tienes permiso para autorizar como ${ROL_LABEL[rol]}` }
     }
 
     // --- Pedido ----------------------------------------------------------
-    const pedRes = await getPedido(pedidoId, empresaId)
+    const pedRes = await getPedidoInterno(pedidoId, empresaId)
     if (!pedRes.success || !pedRes.data) {
       return { success: false, error: pedRes.error ?? "El pedido no existe" }
     }
     const pedido = pedRes.data
 
     // --- Control 3: separación de funciones ------------------------------
-    const chequeo = puedeFirmar(pedido, rol, user.id, nombreUsuario)
+    const chequeo = puedeFirmar(pedido, rol, userId, nombreUsuario)
     if (!chequeo.puede) return { success: false, error: chequeo.motivo }
 
     // --- Control 2: clave del rol ----------------------------------------
-    const claveEsperada = await getParam(
+    // leerParam (servidor) y no getParam: la accion publica ya no entrega
+    // secretos, justamente para que nadie pueda leer estas claves.
+    const claveEsperada = await leerParam(
       rol === "contabilidad" ? PARAM.CLAVE_CONTABILIDAD : PARAM.CLAVE_GERENCIA,
       empresaId,
     )
 
-    if (!claveEsperada) {
+    // La clave de fabrica no protege nada: esta escrita en el script que la
+    // sembro. Mientras no se cambie, no se firma.
+    if (!claveEsperada || claveEsperada === VALOR_SECRETO_DE_FABRICA) {
       return {
         success: false,
-        error: `No hay clave configurada para ${ROL_LABEL[rol]}. Defínela en Parametrización.`,
+        error: `La clave de ${ROL_LABEL[rol]} no está configurada. Cámbiala en Parametrización antes de autorizar pedidos.`,
       }
     }
 
@@ -184,7 +245,7 @@ export async function autorizarPedido(
         pedido_id: pedidoId,
         rol,
         accion: "intento_fallido",
-        usuario_id: user.id,
+        usuario_id: userId,
         usuario_nombre: nombreUsuario,
         total_al_momento: pedido.total,
       })
@@ -196,13 +257,13 @@ export async function autorizarPedido(
     const campos =
       rol === "contabilidad"
         ? {
-            auth_contabilidad_por: user.id,
+            auth_contabilidad_por: userId,
             auth_contabilidad_nombre: nombreUsuario,
             auth_contabilidad_en: ahora,
             auth_contabilidad_nota: nota ?? null,
           }
         : {
-            auth_gerencia_por: user.id,
+            auth_gerencia_por: userId,
             auth_gerencia_nombre: nombreUsuario,
             auth_gerencia_en: ahora,
             auth_gerencia_nota: nota ?? null,
@@ -237,10 +298,25 @@ export async function autorizarPedido(
       pedido_id: pedidoId,
       rol,
       accion: "autorizar",
-      usuario_id: user.id,
+      usuario_id: userId,
       usuario_nombre: nombreUsuario,
       nota: nota ?? null,
       total_al_momento: pedido.total,
+    })
+
+    // Bitacora unica. crm_autorizaciones_log se sigue escribiendo para no
+    // cortar el historial de los pedidos anteriores.
+    await registrarEvento({
+      empresaId,
+      entidad: "pedido",
+      entidadId: pedidoId,
+      tipo: "firmado",
+      estadoDesde: pedido.estado,
+      estadoHasta: nuevoEstado,
+      usuarioId: ctx.userId,
+      usuarioNombre: ctx.nombre,
+      nota: nota ?? null,
+      datos: { rol },
     })
 
     return { success: true, data: { ...actualizado, estado: nuevoEstado } }
@@ -256,24 +332,22 @@ export async function rechazarPedido(
   empresaId = 1,
 ): Promise<ActionResult<Pedido>> {
   try {
+    const ctx = await exigirPermiso("rechazarPedido", PERMISO_POR_ROL[rol])
+    const userId = ctx.userId
+    const nombreUsuario = ctx.nombre
+
     if (!motivo?.trim()) {
       return { success: false, error: "Escribe el motivo del rechazo" }
     }
 
     const supabase = await getSupabaseAdmin()
 
-    const user = await getCurrentUser()
-    if (!user) return { success: false, error: "Sesión no válida" }
-
-    const perfil = await getUserProfile(user.id)
-    const nombreUsuario = perfil?.usuario ?? user.email ?? "desconocido"
-
-    const permisos = await getUserPermissions(user.id)
-    if (!permisos || permisos[PERMISO_POR_ROL[rol]] !== true) {
+    // Igual que al autorizar: se bloquea en cualquier modo de seguridad.
+    if (!tienePermiso(ctx, PERMISO_POR_ROL[rol])) {
       return { success: false, error: `No tienes permiso para rechazar como ${ROL_LABEL[rol]}` }
     }
 
-    const pedRes = await getPedido(pedidoId, empresaId)
+    const pedRes = await getPedidoInterno(pedidoId, empresaId)
     if (!pedRes.success || !pedRes.data) return { success: false, error: "El pedido no existe" }
 
     if (pedRes.data.idpedido_lipgo) {
@@ -286,7 +360,7 @@ export async function rechazarPedido(
       .from("crm_pedidos")
       .update({
         estado: "rechazado",
-        rechazado_por: user.id,
+        rechazado_por: userId,
         rechazado_nombre: nombreUsuario,
         rechazado_en: new Date().toISOString(),
         motivo_rechazo: motivo.trim(),
@@ -303,10 +377,23 @@ export async function rechazarPedido(
       pedido_id: pedidoId,
       rol,
       accion: "rechazar",
-      usuario_id: user.id,
+      usuario_id: userId,
       usuario_nombre: nombreUsuario,
       nota: motivo.trim(),
       total_al_momento: pedRes.data.total,
+    })
+
+    await registrarEvento({
+      empresaId,
+      entidad: "pedido",
+      entidadId: pedidoId,
+      tipo: "rechazado",
+      estadoDesde: pedRes.data.estado,
+      estadoHasta: "rechazado",
+      usuarioId: ctx.userId,
+      usuarioNombre: ctx.nombre,
+      nota: motivo.trim(),
+      datos: { rol },
     })
 
     return { success: true, data: data as Pedido }
@@ -334,17 +421,22 @@ export async function enviarPedidoALipgo(
   empresaId = 1,
 ): Promise<ActionResult<{ idpedido: number; lineas: number; mensaje: string }>> {
   try {
+    const ctx = await exigirPermiso(
+      "enviarPedidoALipgo",
+      "crm_pedidos", "crm_autorizar_contabilidad", "crm_autorizar_gerencia",
+    )
     const supabase = await getSupabaseAdmin()
-
-    const user = await getCurrentUser()
-    if (!user) return { success: false, error: "Sesión no válida" }
 
     // Se comprueba aquí ADEMÁS de en la función: el error en la interfaz es
     // más claro que el de la base, y así se evita el viaje de ida y vuelta.
-    const pedRes = await getPedido(pedidoId, empresaId)
+    const pedRes = await getPedidoInterno(pedidoId, empresaId)
     if (!pedRes.success || !pedRes.data) return { success: false, error: "El pedido no existe" }
 
     const pedido = pedRes.data
+
+    // Escribe en produccion de LIPgo a nombre de ese cliente: un vendedor no
+    // puede empujar el pedido de un cliente ajeno.
+    await asegurarClienteVisible(ctx, pedido.cliente_id)
 
     if (pedido.idpedido_lipgo) {
       return { success: false, error: `Ya viajó a operación como pedido ${pedido.idpedido_lipgo}` }
@@ -363,7 +455,7 @@ export async function enviarPedidoALipgo(
 
     const { data, error } = await supabase.rpc("crm_proyectar_pedido_lipgo", {
       p_pedido_id: pedidoId,
-      p_usuario_id: user.id,
+      p_usuario_id: ctx.userId,
     })
 
     if (error) return { success: false, error: error.message }
@@ -436,26 +528,30 @@ export async function getPedidosPendientesDeMiFirma(
   empresaId = 1,
 ): Promise<ActionResult<{ pedidos: PedidoConDetalle[]; roles: RolAutorizacion[] }>> {
   try {
-    const user = await getCurrentUser()
-    if (!user) return { success: false, error: "Sesión no válida" }
+    const ctx = await exigirPermiso(
+      "getPedidosPendientesDeMiFirma",
+      "crm_autorizar_contabilidad", "crm_autorizar_gerencia",
+    )
 
-    const permisos = await getUserPermissions(user.id)
+    // Los roles salen de los permisos reales, no del modo de seguridad: en
+    // "log" exigirPermiso deja pasar, pero sin permiso la bandeja queda vacia.
     const roles: RolAutorizacion[] = []
-    if (permisos?.crm_autorizar_contabilidad) roles.push("contabilidad")
-    if (permisos?.crm_autorizar_gerencia) roles.push("gerencia")
+    if (tienePermiso(ctx, "crm_autorizar_contabilidad")) roles.push("contabilidad")
+    if (tienePermiso(ctx, "crm_autorizar_gerencia")) roles.push("gerencia")
 
     if (!roles.length) return { success: true, data: { pedidos: [], roles: [] } }
 
-    const res = await getPedidos(empresaId, { soloPendientes: true })
+    // Sin filtro de vendedor: quien firma, firma los pedidos de todos.
+    const res = await getPedidosInterno(empresaId, { soloPendientes: true }, null)
     if (!res.success) return { success: false, error: res.error }
 
-    const perfil = await getUserProfile(user.id)
-    const nombreUsuario = perfil?.usuario ?? ""
+    const userId = ctx.userId
+    const nombreUsuario = ctx.nombre
 
     // Solo los que este usuario puede firmar de verdad: si ya dio la otra
     // firma o creó el pedido, no le sirve verlo en su bandeja.
     const pendientes = (res.data ?? []).filter((p) =>
-      roles.some((rol) => puedeFirmar(p, rol, user.id, nombreUsuario).puede),
+      roles.some((rol) => puedeFirmar(p, rol, userId, nombreUsuario).puede),
     )
 
     return { success: true, data: { pedidos: pendientes, roles } }

@@ -8,6 +8,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { hoyISO, sumarDias, rangoDelMes } from "@/lib/crm-fechas"
+import { exigirPermiso, mensajeError } from "@/lib/crm-auth"
 
 export interface ActionResult<T = unknown> {
   success: boolean
@@ -58,6 +59,8 @@ export async function getDashboardComercial(
   empresaId = 1,
 ): Promise<ActionResult<DashboardComercial>> {
   try {
+    const ctx = await exigirPermiso("getDashboardComercial", "crm_dashboard")
+    // TODO fase 4: filtrar por vendedor cuando ctx.alcance === "propios"
     const supabase = await getSupabaseAdmin()
     const hoy = hoyISO()
     const mes = rangoDelMes(hoy)
@@ -268,7 +271,7 @@ export async function getDashboardComercial(
       },
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Error desconocido"
+    const msg = mensajeError(err)
     console.error("[crm-dashboard]", msg)
     return { success: false, error: msg }
   }

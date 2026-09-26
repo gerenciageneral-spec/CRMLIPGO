@@ -3,9 +3,15 @@
 // Listas de precios: creacion, detalle y asignacion a clientes.
 //
 // TOCA DINERO: lo que salga de aqui es lo que se le cobra al cliente.
+//
+// PERMISOS: leer listas lo hace cualquiera con sesion (pedidos y cotizaciones
+// las necesitan). Crearlas, cambiar precios o descuentos exige
+// `crm_listas_precios` o `crm_descuentos_admin`: los descuentos se administran
+// solo desde el panel de administracion (PED-14), no desde el pedido.
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { hoyISO } from "@/lib/crm-fechas"
+import { exigirPermiso, exigirSesion, mensajeError } from "@/lib/crm-auth"
 import type { TipoLista, ListaPrecios, LineaLista } from "@/lib/crm-precios"
 export type { TipoLista, ListaPrecios, LineaLista } from "@/lib/crm-precios"
 
@@ -16,7 +22,7 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-precios]", msg)
   return { success: false, error: msg }
 }
@@ -25,6 +31,7 @@ function fallo(err: unknown): ActionResult<never> {
 
 export async function getListas(empresaId = 1): Promise<ActionResult<ListaPrecios[]>> {
   try {
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_listas_precios")
@@ -78,10 +85,14 @@ export async function crearLista(
     descuento_global?: number
     vigente_hasta?: string | null
   },
-  usuario: string,
+  _usuario: string,
   empresaId = 1,
 ): Promise<ActionResult<ListaPrecios>> {
   try {
+    // Quien crea sale de la sesion; el argumento `_usuario` se conserva por
+    // compatibilidad con los llamados existentes y se ignora.
+    const ctx = await exigirPermiso("crearLista", "crm_listas_precios", "crm_descuentos_admin")
+    const usuario = ctx.nombre
     if (!entrada.nombre?.trim()) return { success: false, error: "La lista necesita un nombre" }
 
     const supabase = await getSupabaseAdmin()
@@ -121,6 +132,7 @@ export async function actualizarLista(
   empresaId = 1,
 ): Promise<ActionResult<ListaPrecios>> {
   try {
+    await exigirPermiso("actualizarLista", "crm_listas_precios", "crm_descuentos_admin")
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_listas_precios")
@@ -141,6 +153,7 @@ export async function actualizarLista(
 
 export async function getDetalleLista(listaId: number): Promise<ActionResult<LineaLista[]>> {
   try {
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("crm_lista_precio_detalle")
@@ -175,6 +188,7 @@ export async function fijarPrecioProducto(
   empresaId = 1,
 ): Promise<ActionResult<LineaLista>> {
   try {
+    await exigirPermiso("fijarPrecioProducto", "crm_listas_precios", "crm_descuentos_admin")
     const tieneManual = entrada.precio_manual != null && entrada.precio_manual >= 0
     const tienePct = entrada.descuento_pct != null && entrada.descuento_pct >= 0
 
@@ -215,6 +229,7 @@ export async function quitarPrecioProducto(
   productoId: number,
 ): Promise<ActionResult<null>> {
   try {
+    await exigirPermiso("quitarPrecioProducto", "crm_listas_precios", "crm_descuentos_admin")
     const supabase = await getSupabaseAdmin()
     const { error } = await supabase
       .from("crm_lista_precio_detalle")
@@ -242,6 +257,7 @@ export async function aplicarDescuentoMasivo(
   empresaId = 1,
 ): Promise<ActionResult<number>> {
   try {
+    await exigirPermiso("aplicarDescuentoMasivo", "crm_listas_precios", "crm_descuentos_admin")
     if (descuentoPct < 0 || descuentoPct > 100) {
       return { success: false, error: "El descuento debe estar entre 0 y 100" }
     }
@@ -277,6 +293,7 @@ export async function asignarListaACliente(
   empresaId = 1,
 ): Promise<ActionResult<null>> {
   try {
+    await exigirPermiso("asignarListaACliente", "crm_listas_precios", "crm_maestros_admin")
     const supabase = await getSupabaseAdmin()
 
     // `clientes` usa id_empresa, con guion bajo: es tabla heredada de LIPgo.
@@ -300,6 +317,7 @@ export async function asignarListaMasiva(
   empresaId = 1,
 ): Promise<ActionResult<number>> {
   try {
+    await exigirPermiso("asignarListaMasiva", "crm_listas_precios", "crm_maestros_admin")
     if (!clienteIds.length) return { success: false, error: "No hay clientes seleccionados" }
 
     const supabase = await getSupabaseAdmin()
@@ -328,6 +346,7 @@ export async function previsualizarLista(
   empresaId = 1,
 ): Promise<ActionResult<{ producto_id: number; nombre: string; base: number; final: number; ahorro: number }[]>> {
   try {
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
 
     const { data: productos, error } = await supabase

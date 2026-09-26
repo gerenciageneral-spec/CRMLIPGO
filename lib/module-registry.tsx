@@ -169,6 +169,10 @@ export const MODULE_REGISTRY: Record<string, ModuleEntry> = {
     permission: "crm_auditoria",
     fullWidth: true,
   },
+  "Integraciones": {
+    component: dynamic(() => import("@/components/crm/integraciones/integraciones-panel"), { loading: Cargando }),
+    permission: "crm_integraciones_admin",
+  },
 }
 
 /** Entrada del modulo, o undefined si no esta registrado. */

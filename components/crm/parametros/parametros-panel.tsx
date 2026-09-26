@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Loader2, Save, RotateCcw, Info, AlertTriangle, Settings } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { listarParametros, setParam } from "@/lib/crm-parametros-actions"
-import { GRUPOS_PARAMETROS, type CrmParametro, type ParamKey } from "@/lib/crm-parametros"
+import { GRUPOS_PARAMETROS, PARAMS_SECRETOS, type CrmParametro, type ParamKey } from "@/lib/crm-parametros"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,10 +27,10 @@ import {
 } from "@/components/ui/tooltip"
 import { toast } from "@/hooks/use-toast"
 
-/** Parametros que son SECRETOS: se pintan como campo de contrasena para que no
- *  queden a la vista de quien pase por detras. Siguen siendo editables; lo que
- *  cambia es que no se muestran. */
-const SECRETOS = new Set(["pedido.clave_contabilidad", "pedido.clave_gerencia"])
+/** Parametros SECRETOS. La lista vive en crm-parametros.ts porque tambien la
+ *  usa el servidor para no devolver nunca su valor: aqui el campo llega vacio,
+ *  se pinta como contrasena, y lo que se escriba reemplaza la clave. */
+const SECRETOS = PARAMS_SECRETOS
 
 /** Parametros de texto con opciones cerradas. Se declaran aqui y no en la
  *  base porque son valores que el CODIGO interpreta: agregar una opcion exige
@@ -104,9 +104,16 @@ export function ParametrosPanel() {
     // Se reemplaza la fila con la que devolvio el servidor: al cambiar un
     // parametro se cierra el anterior y se abre otro, con id nuevo.
     setParametros((prev) => prev.map((x) => (x.clave === p.clave ? res.data! : x)))
+    // El borrador de un secreto vuelve a vacio: lo guardado ya no se muestra.
+    if (SECRETOS.has(p.clave)) setBorrador((b) => ({ ...b, [p.clave]: "" }))
+
     toast({
       title: "Parámetro actualizado",
-      description: `${p.etiqueta}: ${valor}${p.unidad ? " " + p.unidad : ""}. Se aplica en menos de un minuto.`,
+      // Nunca se repite una clave en pantalla: el aviso queda a la vista de
+      // quien pase por detras.
+      description: SECRETOS.has(p.clave)
+        ? `${p.etiqueta}: clave cambiada. Se aplica en menos de un minuto.`
+        : `${p.etiqueta}: ${valor}${p.unidad ? " " + p.unidad : ""}. Se aplica en menos de un minuto.`,
     })
   }
 
@@ -253,6 +260,21 @@ export function ParametrosPanel() {
                       </>
                     )}
                   </div>
+
+                  {p.secreto && !p.secreto.configurado && (
+                    // Mientras la clave siga siendo la de fabrica, nadie puede
+                    // autorizar pedidos: el servidor la rechaza. Se avisa aqui
+                    // para que no se descubra en el momento de firmar.
+                    <p className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                      <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                      Sin configurar: mientras no se cambie, no se pueden autorizar pedidos.
+                    </p>
+                  )}
+                  {p.secreto?.configurado && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Configurada. Escribe una nueva para reemplazarla.
+                    </p>
+                  )}
 
                   {p.tipo === "number" && (p.min_valor != null || p.max_valor != null) && (
                     <p className="text-[11px] text-muted-foreground">

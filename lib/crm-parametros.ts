@@ -56,6 +56,21 @@ export const PARAM = {
   // Rutas
   RUTA_MAX_PARADAS: "ruta.max_paradas_dia",
   RUTA_VELOCIDAD_KMH: "ruta.velocidad_promedio_kmh",
+
+  // Seguridad (script 191)
+  /** log = registra la denegacion y deja pasar; enforce = bloquea. */
+  SEGURIDAD_MODO: "seguridad.modo",
+
+  // Integraciones (script 192). El modo global va en la variable de entorno
+  // SAP_MODE; estos deciden que flujos viajan con la conexion encendida.
+  SAP_PEDIDOS: "integracion.sap.pedidos",
+  SAP_RECAUDOS: "integracion.sap.recaudos",
+  SAP_CLIENTES: "integracion.sap.clientes",
+  SAP_FACTURAS: "integracion.sap.facturas",
+  SAP_INVENTARIO: "integracion.sap.inventario",
+  SAP_SUCURSALES: "integracion.sap.sucursales",
+  OUTBOX_MAX_INTENTOS: "integracion.outbox.max_intentos",
+  OUTBOX_ESPERA_MIN: "integracion.outbox.espera_min",
 } as const
 
 export type ParamKey = (typeof PARAM)[keyof typeof PARAM]
@@ -91,6 +106,18 @@ export const PARAM_FALLBACK: Record<ParamKey, string> = {
   "pedido.clave_gerencia": "",
   "ruta.max_paradas_dia": "12",
   "ruta.velocidad_promedio_kmh": "35",
+  // Si la base no responde, se valida en modo registro: bloquear a todos por
+  // una caida de la base es peor que dejar pasar y dejar constancia.
+  "seguridad.modo": "log",
+  // Apagados si falta la fila: SAP nunca se enciende por omision.
+  "integracion.sap.pedidos": "false",
+  "integracion.sap.recaudos": "false",
+  "integracion.sap.clientes": "false",
+  "integracion.sap.facturas": "false",
+  "integracion.sap.inventario": "false",
+  "integracion.sap.sucursales": "false",
+  "integracion.outbox.max_intentos": "5",
+  "integracion.outbox.espera_min": "5",
 }
 
 /** Como se llama cada grupo en la pantalla de Parametrizacion. */
@@ -104,6 +131,8 @@ export const GRUPOS_PARAMETROS: Record<string, string> = {
   descuentos: "Descuentos",
   pedidos: "Pedidos y autorizaciones",
   rutas: "Rutas y planificacion",
+  seguridad: "Seguridad",
+  integracion: "Integraciones (SAP, LIPgo, WhatsApp)",
 }
 
 export interface CrmParametro {
@@ -123,7 +152,23 @@ export interface CrmParametro {
   editable: boolean
   actualizado_por: string | null
   actualizado_en: string
+  /** Solo en parametros secretos: el valor NUNCA viaja al navegador, y esto
+   *  dice si ya se configuro o sigue con el valor de fabrica. */
+  secreto?: { configurado: boolean }
 }
+
+/**
+ * Parametros SECRETOS: su valor nunca sale del servidor. Las acciones publicas
+ * los devuelven vacios; solo el codigo del servidor los lee, con
+ * `leerParam` de crm-parametros-server.ts.
+ */
+export const PARAMS_SECRETOS: ReadonlySet<string> = new Set([
+  "pedido.clave_contabilidad",
+  "pedido.clave_gerencia",
+])
+
+/** Valor con el que se siembran las claves. Mientras siga asi, no protegen nada. */
+export const VALOR_SECRETO_DE_FABRICA = "CAMBIAR"
 
 /** Momentos en que puede causarse una comision (parametro COMISION_MOMENTO). */
 export type MomentoComision = "recaudo" | "despacho" | "autorizacion"

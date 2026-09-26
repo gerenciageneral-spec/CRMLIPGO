@@ -10,6 +10,9 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { esActivo, type ClienteCrm, type ProductoCrm, type SucursalCrm, type VendedorCrm } from "@/lib/crm-catalogos"
+import {
+  exigirPermiso, exigirSesion, tienePermiso, filtrarPorVendedor, asegurarClienteVisible, mensajeError,
+} from "@/lib/crm-auth"
 
 export interface ActionResult<T = unknown> {
   success: boolean
@@ -18,7 +21,7 @@ export interface ActionResult<T = unknown> {
 }
 
 function fallo(err: unknown): ActionResult<never> {
-  const msg = err instanceof Error ? err.message : "Error desconocido"
+  const msg = mensajeError(err)
   console.error("[crm-catalogos]", msg)
   return { success: false, error: msg }
 }
@@ -30,14 +33,19 @@ export async function getClientesCrm(
   incluirInactivos = false,
 ): Promise<ActionResult<ClienteCrm[]>> {
   try {
+    const ctx = await exigirSesion()
     const supabase = await getSupabaseAdmin()
 
     // `clientes` usa id_empresa, con guion bajo: es tabla heredada.
-    const { data, error } = await supabase
+    // Un vendedor sin `crm_ver_todos_clientes` solo recibe sus clientes: el
+    // filtro va en la consulta, no en la pantalla, para que no viajen al
+    // navegador los datos de clientes ajenos.
+    let q = supabase
       .from("clientes")
       .select("*")
       .eq("id_empresa", empresaId)
-      .order("nombre")
+    q = filtrarPorVendedor(q, ctx, "vendedor_asignado")
+    const { data, error } = await q.order("nombre")
 
     if (error) return { success: false, error: error.message }
 
@@ -69,6 +77,9 @@ export async function getClientesCrm(
 
 export async function getClienteCrm(id: number, empresaId = 1): Promise<ActionResult<ClienteCrm>> {
   try {
+    const ctx = await exigirSesion()
+    // Adivinar el id de un cliente ajeno no debe bastar para ver su cupo y cartera.
+    await asegurarClienteVisible(ctx, id)
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("clientes")
@@ -109,6 +120,20 @@ export async function actualizarDatosComercialesCliente(
   empresaId = 1,
 ): Promise<ActionResult<ClienteCrm>> {
   try {
+    const ctx = await exigirPermiso("actualizarDatosComercialesCliente", "crm_clientes")
+
+    // Cupo, plazo, bloqueo, lista de precios y vendedor son decisiones de
+    // credito, no de venta (CTA-02: el cupo lo edita Cartera o Administracion).
+    // Sin esta segunda validacion, un vendedor con `crm_clientes` podia subirle
+    // el cupo a su propio cliente para destrabar un pedido.
+    const tocaCredito = (
+      ["cupo_credito", "dias_credito", "bloqueado_cartera", "lista_precio_id", "vendedor_asignado"] as const
+    ).some((k) => datos[k] !== undefined)
+    if (tocaCredito && !tienePermiso(ctx, "crm_recaudos_aprobar", "crm_maestros_admin")) {
+      // exigirPermiso registra la denegacion y, en modo enforce, bloquea.
+      await exigirPermiso("actualizarCreditoCliente", "crm_recaudos_aprobar", "crm_maestros_admin")
+    }
+
     const supabase = await getSupabaseAdmin()
 
     // Lista blanca explícita: si el llamador manda "nombre" o "documento", no
@@ -151,6 +176,7 @@ export async function getProductosCrm(
   incluirInactivos = false,
 ): Promise<ActionResult<ProductoCrm[]>> {
   try {
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase
       .from("productos")
@@ -177,6 +203,7 @@ export async function actualizarDatosComercialesProducto(
   empresaId = 1,
 ): Promise<ActionResult<ProductoCrm>> {
   try {
+    await exigirPermiso("actualizarDatosComercialesProducto", "crm_productos", "crm_maestros_admin")
     const supabase = await getSupabaseAdmin()
 
     const permitido = {
@@ -214,6 +241,8 @@ export async function resolverPrecio(
   empresaId = 1,
 ): Promise<ActionResult<number>> {
   try {
+    // Solo sesion: el precio lo consulta cualquiera que arme un pedido o una cotizacion.
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
     const { data, error } = await supabase.rpc("crm_resolver_precio", {
       p_idempresa: empresaId,
@@ -235,6 +264,8 @@ export async function getSucursalesCrm(
   clienteId?: number,
 ): Promise<ActionResult<SucursalCrm[]>> {
   try {
+    const ctx = await exigirSesion()
+    if (clienteId) await asegurarClienteVisible(ctx, clienteId)
     const supabase = await getSupabaseAdmin()
 
     // `bodegas` usa idempresa SIN guion bajo, al revés que clientes.
@@ -268,6 +299,7 @@ export async function getSucursalesCrm(
 
 export async function getVendedoresCrm(empresaId = 1): Promise<ActionResult<VendedorCrm[]>> {
   try {
+    await exigirSesion()
     const supabase = await getSupabaseAdmin()
 
     const [vendRes, detRes] = await Promise.all([

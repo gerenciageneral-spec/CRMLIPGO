@@ -23,8 +23,11 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getUserPermissions } from "@/lib/permissions-actions"
 import { getCurrentUser } from "@/lib/auth-actions"
 import { groups } from "@/lib/dashboard-data"
-import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
-import { TABLAS_LECTURA, permisoDeTabla, columnaEmpresaDe } from "@/lib/crm-ia-registry"
+import { MODULE_PERMISSION_MAP, permisosDelModulo, type UserPermissions } from "@/lib/permissions-map"
+import {
+  TABLAS_LECTURA, permisoDeTabla, columnaEmpresaDe, alcanceVendedorDe,
+} from "@/lib/crm-ia-registry"
+import { getContexto } from "@/lib/crm-auth"
 
 export const maxDuration = 30
 
@@ -38,6 +41,17 @@ export async function POST(req: Request) {
     // -----------------------------------------------------------------------
     const user = await getCurrentUser()
     if (!user) {
+      return new Response(JSON.stringify({ error: "Sesión no válida" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    // Alcance del usuario (vendedor con `propios` o ve todo). Se resuelve aqui,
+    // dentro de la peticion, y no dentro de la herramienta: la herramienta se
+    // ejecuta durante el streaming, cuando la respuesta ya empezo.
+    const ctx = await getContexto()
+    if (!ctx) {
       return new Response(JSON.stringify({ error: "Sesión no válida" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
@@ -58,9 +72,9 @@ export async function POST(req: Request) {
     }
 
     // Modulos a los que el usuario puede ser dirigido.
-    const modulosPermitidos = Object.entries(MODULE_PERMISSION_MAP)
-      .filter(([, permiso]) => tienePermiso(permiso))
-      .map(([nombre]) => nombre)
+    // Misma regla que el menu: incluye los permisos alternativos del modulo.
+    const modulosPermitidos = Object.keys(MODULE_PERMISSION_MAP)
+      .filter((nombre) => permisosDelModulo(nombre).some((k) => tienePermiso(k)))
 
     const gruposVisibles = groups
       .filter((g) => {
@@ -107,12 +121,37 @@ export async function POST(req: Request) {
           }),
           execute: async ({ tabla, columnas, filtros, orden, limite, contar, sumar }) => {
             try {
+              // Alcance por vendedor. El filtro de empresa no basta: todos los
+              // vendedores son de la misma, y sin esto uno le podia pedir al
+              // asistente la cartera o los clientes de otro.
+              let colVendedor: string | null = null
+              if (ctx.alcance === "propios") {
+                const alcance = alcanceVendedorDe(tabla)
+                if (alcance === "negar") {
+                  return {
+                    ok: false,
+                    error:
+                      `No puedo consultar ${tabla} desde el asistente con tu perfil de vendedor: ` +
+                      "no se puede limitar a tus clientes. Consúltalo en el módulo correspondiente.",
+                  }
+                }
+                if (alcance) colVendedor = alcance.columna
+              }
+
+              // Nada de recursos embebidos ("pedidos(*)") en las columnas: con
+              // ellos se leeria una tabla fuera de la lista blanca, o una
+              // restringida colgada de un catalogo, sin pasar por el filtro.
+              if (columnas && /[()]/.test(columnas)) {
+                return { ok: false, error: "Solo se pueden pedir columnas de la tabla, sin relaciones." }
+              }
+
               const supabase = await getSupabaseAdmin()
               const colEmpresa = columnaEmpresaDe(tabla)
 
               if (contar) {
                 let q = supabase.from(tabla).select("*", { count: "exact", head: true })
                 if (colEmpresa) q = q.eq(colEmpresa, empresaId)
+                if (colVendedor) q = q.eq(colVendedor, ctx.vendedorId)
                 for (const f of filtros ?? []) q = aplicarFiltro(q, f)
                 const { count, error } = await q
                 if (error) return { ok: false, error: error.message }
@@ -122,6 +161,9 @@ export async function POST(req: Request) {
               let q = supabase.from(tabla).select(columnas || "*")
               // El filtro de empresa lo pone el servidor, SIEMPRE.
               if (colEmpresa) q = q.eq(colEmpresa, empresaId)
+              // El del vendedor tambien lo pone el servidor; un filtro del
+              // modelo sobre la misma columna se suma (AND), no lo reemplaza.
+              if (colVendedor) q = q.eq(colVendedor, ctx.vendedorId)
               for (const f of filtros ?? []) q = aplicarFiltro(q, f)
               if (orden) q = q.order(orden.columna, { ascending: orden.ascendente })
               q = q.limit(limite)
@@ -152,8 +194,7 @@ export async function POST(req: Request) {
           execute: async ({ modulo }) => {
             // Doble verificación: el enum ya limita, pero el permiso puede
             // haber cambiado durante la conversación.
-            const permiso = MODULE_PERMISSION_MAP[modulo]
-            if (!permiso || !tienePermiso(permiso)) {
+            if (!permisosDelModulo(modulo).some((k) => tienePermiso(k))) {
               return { permitido: false, mensaje: "No tienes acceso a ese módulo." }
             }
             return { permitido: true, navegar_a: modulo }

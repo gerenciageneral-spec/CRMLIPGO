@@ -7,7 +7,7 @@ import { getCurrentEmpresaId } from "@/lib/company-filter"
 // en `permissions-map.ts` (sin "use server"). Next.js prohibe exportar
 // valores no async desde archivos con "use server", asi que el mapa no
 // puede vivir aqui. Importamos desde el modulo compartido.
-import { MODULE_PERMISSION_MAP, type UserPermissions } from "@/lib/permissions-map"
+import { MODULE_PERMISSION_MAP, puedeVerModulo, type UserPermissions } from "@/lib/permissions-map"
 
 export async function getUserPermissions(userId?: string): Promise<UserPermissions | null> {
   try {
@@ -36,30 +36,14 @@ export async function getUserPermissions(userId?: string): Promise<UserPermissio
 
 export async function checkModulePermission(moduleName: string): Promise<boolean> {
   try {
-    console.log("[v0] checkModulePermission: Checking permission for module:", moduleName)
-
-    const permissionKey = MODULE_PERMISSION_MAP[moduleName]
-    if (!permissionKey) {
-      console.log("[v0] checkModulePermission: Module not found in permission map:", moduleName, "- denying access")
-      return false
-    }
-
+    // Un modulo que no esta en el mapa no lo ve nadie: fallar cerrado.
+    if (!MODULE_PERMISSION_MAP[moduleName]) return false
     const permissions = await getUserPermissions()
-    if (!permissions) {
-      console.log("[v0] checkModulePermission: No permissions found for user - denying access")
-      return false
-    }
-
-    console.log("[v0] checkModulePermission: All permissions for user:", JSON.stringify(permissions, null, 2))
-    console.log("[v0] checkModulePermission: Looking for key:", permissionKey)
-    console.log("[v0] checkModulePermission: Value for key:", permissions[permissionKey])
-    console.log("[v0] checkModulePermission: Value type:", typeof permissions[permissionKey])
-
-    const hasPermission = permissions[permissionKey] === true
-    console.log("[v0] checkModulePermission: Permission for", moduleName, "(", permissionKey, "):", hasPermission)
-    return hasPermission
+    if (!permissions) return false
+    // Incluye los permisos alternativos del modulo (MODULE_PERMISOS_ALTERNOS).
+    return puedeVerModulo(permissions as unknown as Record<string, unknown>, moduleName)
   } catch (error) {
-    console.error("[v0] checkModulePermission: Error checking module permission:", error)
+    console.error("checkModulePermission:", error)
     return false
   }
 }

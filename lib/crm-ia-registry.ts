@@ -70,6 +70,54 @@ export function permisoDeTabla(tabla: string): keyof UserPermissions {
 }
 
 /**
+ * Columna que guarda el vendedor en cada tabla, para el alcance `propios`.
+ *
+ * Sin esto, un vendedor le podia preguntar al asistente por la cartera o los
+ * clientes de otro: el filtro de empresa no basta, todos son de la misma.
+ * Coincide con lo que usan las acciones del servidor (`filtrarPorVendedor`).
+ */
+const COLUMNA_VENDEDOR: Record<string, string> = {
+  clientes: "vendedor_asignado",
+  crm_prospectos: "vendedor_id",
+  crm_actividades: "vendedor_id",
+  crm_agenda: "vendedor_id",
+  crm_cotizaciones: "vendedor_id",
+  crm_pedidos: "vendedor_id",
+  crm_cuentas_cobrar: "vendedor_id",
+  crm_cartera_aging: "vendedor_id",
+  crm_comisiones: "vendedor_id",
+}
+
+/**
+ * Tablas SIN columna de vendedor que no se pueden filtrar por el y cuyo
+ * contenido es de un vendedor concreto (plata, cartera, precios pactados).
+ * Para alguien con alcance `propios` se niegan: sin filtro posible, leerlas
+ * seria ver las de todos. Para verlas de un pedido o una cuenta propios, el
+ * vendedor tiene los modulos, que si validan el alcance.
+ */
+const SIN_VENDEDOR_RESTRINGIDAS = new Set<string>([
+  "crm_pagos",
+  "crm_pedido_detalle",
+  "crm_cotizacion_detalle",
+  "crm_prospecto_interes",
+  // Sucursales de TODOS los clientes, con direccion. Un vendedor ve las de sus
+  // clientes en el modulo, que si filtra; por el asistente no hay como.
+  "bodegas",
+])
+
+/**
+ * Como se aplica el alcance `propios` a una tabla:
+ *   - `{ columna }`: filtrar por esa columna con el vendedor del usuario.
+ *   - `"negar"`: no se puede filtrar y el contenido es sensible.
+ *   - `null`: catalogo compartido (productos, etapas, listas); se ve completo.
+ */
+export function alcanceVendedorDe(tabla: string): { columna: string } | "negar" | null {
+  if (COLUMNA_VENDEDOR[tabla]) return { columna: COLUMNA_VENDEDOR[tabla] }
+  if (SIN_VENDEDOR_RESTRINGIDAS.has(tabla)) return "negar"
+  return null
+}
+
+/**
  * Columna por la que se filtra la empresa en cada tabla, o null si es un
  * catalogo global.
  *
